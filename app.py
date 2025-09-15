@@ -6,6 +6,19 @@
 # - CSV 로컬 저장 (users.csv, matches.csv) / 관리자 대시보드
 # - 한국어 UI
 # ------------------------------------------------------------
+python -m venv .venv
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
+
+pip install streamlit pandas numpy scikit-learn
+
+streamlit run app.py
+
+# macOS/Linux
+export ADMIN_PASS="원하는비번"
+streamlit run app.py
+# Windows PowerShell
+$env:ADMIN_PASS="원하는비번"; streamlit run app.py
+
 import os
 import json
 import time
