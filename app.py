@@ -1,11 +1,7 @@
 # app.py
 # ------------------------------------------------------------
 # 노인 멘토 - 청년 멘티 매칭 플랫폼 (Streamlit 단일 통합 버전)
-# - 회원가입/로그인
-# - 프로필 설문 (멘토/멘티)
-# - 점수 기반 맞춤 매칭
-# - 로컬 CSV 저장 + 관리자 대시보드
-# - 안전 파서/기본값 정제/CSV 정화 포함
+# 안전 파서 + 기본값 정제 + CSV 정화 + NaN/비문자열 텍스트 방어 포함
 # ------------------------------------------------------------
 import os
 import json
@@ -17,7 +13,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
-
 
 # -----------------------------
 # 전역 상수 & 선택지
@@ -46,7 +41,6 @@ TRAIT_QUESTIONS = [
     ("엄격한 피드백을 선호합니다", "strict"),
 ]
 
-
 # -----------------------------
 # 유틸
 # -----------------------------
@@ -68,6 +62,18 @@ def hash_pw(pw: str) -> str:
 
 def now_str() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def safe_str(x: Any) -> str:
+    """NaN/None/비문자열을 안전하게 '' 또는 문자열로 변환"""
+    if x is None:
+        return ""
+    if isinstance(x, float) and np.isnan(x):
+        return ""
+    try:
+        s = str(x)
+    except Exception:
+        return ""
+    return s
 
 def _parse_json_list_or_dict_cell(x):
     """리스트/딕트 JSON 문자열만 안전하게 파싱. 그 외는 [] 반환."""
@@ -95,6 +101,11 @@ def load_users() -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].apply(_parse_json_list_or_dict_cell)
 
+    # 텍스트 컬럼은 NaN → "" 로 보정
+    for col in ["intro", "goals", "age", "gender", "region", "name", "email"]:
+        if col in df.columns:
+            df[col] = df[col].apply(safe_str)
+
     return df
 
 def save_users(df: pd.DataFrame):
@@ -104,6 +115,10 @@ def save_users(df: pd.DataFrame):
             lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, (list, dict))
             else ("[]" if (x is None or (isinstance(x, float) and np.isnan(x))) else json.dumps([x], ensure_ascii=False))
         )
+    # 텍스트 컬럼은 문자열 보장
+    for col in ["intro", "goals", "age", "gender", "region", "name", "email"]:
+        if col in df2.columns:
+            df2[col] = df2[col].apply(safe_str)
     df2.to_csv(USERS_CSV, index=False, encoding="utf-8")
 
 def load_matches() -> pd.DataFrame:
@@ -146,8 +161,7 @@ def deserialize_traits(s: Any) -> Dict[str,int]:
 def jaccard(a: List[str], b: List[str]) -> float:
     sa, sb = set(a), set(b)
     if len(sa)==0 and len(sb)==0: return 0.0
-    inter = len(sa & sb)
-    union = len(sa | sb)
+    inter = len(sa & sb); union = len(sa | sb)
     return inter/union if union>0 else 0.0
 
 def overlap_score(a: List[str], b: List[str]) -> float:
@@ -162,11 +176,14 @@ def likert_distance(a: Dict[str,int], b: Dict[str,int]) -> float:
     sims = [(5 - abs(a.get(k,3)-b.get(k,3)))/5 for k in keys]
     return float(np.mean(sims)) if sims else 0.0
 
-def text_overlap(a: str, b: str) -> float:
-    texts = [a or "", b or ""]
-    if texts[0]=="" and texts[1]=="": return 0.0
-    vec = TfidfVectorizer(min_df=1, ngram_range=(1,2))
-    X = vec.fit_transform(texts)
+def text_overlap(a: Any, b: Any) -> float:
+    """TF-IDF 코사인 유사도 (한글/영문 혼용 안전). 비문자열/NaN 안전 처리."""
+    a_str = safe_str(a).strip()
+    b_str = safe_str(b).strip()
+    if a_str == "" and b_str == "":
+        return 0.0
+    vec = TfidfVectorizer(min_df=1, ngram_range=(1,2), token_pattern=r"(?u)\b\w+\b")
+    X = vec.fit_transform([a_str, b_str])
     num = (X[0].multiply(X[1])).sum()
     den = (np.linalg.norm(X[0].toarray()) * np.linalg.norm(X[1].toarray()) + 1e-9)
     return float(num/den)
@@ -181,9 +198,8 @@ def _safe_default(options, raw_list):
     """multiselect의 default 값이 항상 옵션 집합에 포함되도록 정제"""
     if not isinstance(raw_list, list):
         return []
-    cleaned = [str(v).strip() for v in raw_list if isinstance(v, (str, int, float))]
+    cleaned = [safe_str(v) for v in raw_list if isinstance(v, (str, int, float))]
     return [v for v in cleaned if v in options]
-
 
 # -----------------------------
 # 매칭 점수
@@ -219,7 +235,6 @@ def compute_match_score(mentee: Dict[str,Any], mentor: Dict[str,Any]) -> float:
         s_region + s_exp
     )
     return round(float(score), 4)
-
 
 # -----------------------------
 # UI
@@ -310,11 +325,11 @@ def profile_form():
     # 기본정보
     c1, c2, c3 = st.columns(3)
     with c1:
-        age = st.text_input("나이(선택)", value=str(user.get("age","") if not pd.isna(user.get("age","")) else ""))
+        age = st.text_input("나이(선택)", value=safe_str(user.get("age","")))
     with c2:
-        gender = st.text_input("성별(선택)", value=str(user.get("gender","") if not pd.isna(user.get("gender","")) else ""))
+        gender = st.text_input("성별(선택)", value=safe_str(user.get("gender","")))
     with c3:
-        region = st.text_input("지역(예: 서울, 고양, 부산 등)", value=str(user.get("region","") if not pd.isna(user.get("region","")) else ""))
+        region = st.text_input("지역(예: 서울, 고양, 부산 등)", value=safe_str(user.get("region","")))
 
     # multiselect 기본값 안전 정제
     user_areas  = user.get("areas", [])
@@ -322,51 +337,41 @@ def profile_form():
     user_slots  = user.get("slots", [])
     user_topics = user.get("topics", [])
 
-    areas = st.multiselect(
-        "관심/전문 분야 선택",
-        AREAS,
-        default=_safe_default(AREAS, user_areas)
-    )
-
+    areas = st.multiselect("관심/전문 분야 선택", AREAS, default=_safe_default(AREAS, user_areas))
     topics_txt = st.text_area(
         "관심 주제 키워드 (쉼표로 구분)",
-        value=",".join([t for t in user_topics if isinstance(t, (str,int,float)) and str(t).strip()!=""])
+        value=",".join([safe_str(t) for t in (user_topics if isinstance(user_topics, list) else []) if safe_str(t)!=""])
     )
-
-    comms = st.multiselect(
-        "소통 선호",
-        COMM_PREF,
-        default=_safe_default(COMM_PREF, user_comm)
-    )
-
-    slots = st.multiselect(
-        "가능 요일/시간",
-        SLOTS,
-        default=_safe_default(SLOTS, user_slots)
-    )
+    comms = st.multiselect("소통 선호", COMM_PREF, default=_safe_default(COMM_PREF, user_comm))
+    slots = st.multiselect("가능 요일/시간", SLOTS, default=_safe_default(SLOTS, user_slots))
 
     # 성향/스타일
     trait_block(prefix="trait", title="멘토링 성향/스타일")
 
-    intro = st.text_area("자기소개 (멘토는 경력/강점 포함 권장)", value=str(user.get("intro","") if not pd.isna(user.get("intro","")) else ""))
-    goals = st.text_area("목표/요청사항 (무엇을 얻고 싶은가?)", value=str(user.get("goals","") if not pd.isna(user.get("goals","")) else ""))
+    intro = st.text_area("자기소개 (멘토는 경력/강점 포함 권장)", value=safe_str(user.get("intro","")))
+    goals = st.text_area("목표/요청사항 (무엇을 얻고 싶은가?)", value=safe_str(user.get("goals","")))
 
     exp_years = 0
     if user["role"] == "멘토":
-        exp_years = st.number_input("멘토링 관련/직무 경력 (년)", 0, 50, int(user.get("experience_years",0) if not pd.isna(user.get("experience_years",0)) else 0))
+        raw_exp = user.get("experience_years", 0)
+        try:
+            exp_init = int(raw_exp) if not (isinstance(raw_exp, float) and np.isnan(raw_exp)) else 0
+        except:
+            exp_init = 0
+        exp_years = st.number_input("멘토링 관련/직무 경력 (년)", 0, 50, exp_init)
 
     if st.button("저장"):
         idx = df[df["user_id"]==st.session_state["user_id"]].index[0]
-        df.at[idx, "age"] = age
-        df.at[idx, "gender"] = gender
-        df.at[idx, "region"] = region
+        df.at[idx, "age"] = safe_str(age)
+        df.at[idx, "gender"] = safe_str(gender)
+        df.at[idx, "region"] = safe_str(region)
         df.at[idx, "areas"] = json.dumps(areas, ensure_ascii=False)
-        df.at[idx, "topics"] = json.dumps([t.strip() for t in topics_txt.split(",") if str(t).strip()], ensure_ascii=False)
+        df.at[idx, "topics"] = json.dumps([safe_str(t).strip() for t in topics_txt.split(",") if safe_str(t).strip()!=""], ensure_ascii=False)
         df.at[idx, "comm_pref"] = json.dumps(comms, ensure_ascii=False)
         df.at[idx, "slots"] = json.dumps(slots, ensure_ascii=False)
         df.at[idx, "style"] = serialize_traits(parse_trait_answers("trait"))
-        df.at[idx, "intro"] = intro
-        df.at[idx, "goals"] = goals
+        df.at[idx, "intro"] = safe_str(intro)
+        df.at[idx, "goals"] = safe_str(goals)
         if user["role"] == "멘토":
             df.at[idx, "experience_years"] = int(exp_years)
         df.at[idx, "updated_at"] = now_str()
@@ -377,36 +382,36 @@ def row_to_userdict(row: pd.Series) -> Dict[str,Any]:
     return {
         "user_id": int(row["user_id"]),
         "role": row["role"],
-        "name": row["name"],
-        "email": row["email"],
-        "age": row.get("age",""),
-        "gender": row.get("gender",""),
-        "region": row.get("region",""),
+        "name": safe_str(row.get("name","")),
+        "email": safe_str(row.get("email","")),
+        "age": safe_str(row.get("age","")),
+        "gender": safe_str(row.get("gender","")),
+        "region": safe_str(row.get("region","")),
         "areas": deserialize_list(row.get("areas","[]")),
         "topics": deserialize_list(row.get("topics","[]")),
         "style": deserialize_traits(row.get("style","{}")),
         "comm_pref": deserialize_list(row.get("comm_pref","[]")),
         "slots": deserialize_list(row.get("slots","[]")),
         "experience_years": int(row.get("experience_years",0) if not pd.isna(row.get("experience_years",0)) else 0),
-        "intro": row.get("intro",""),
-        "goals": row.get("goals",""),
+        "intro": safe_str(row.get("intro","")),
+        "goals": safe_str(row.get("goals","")),
     }
 
 def user_card(row: pd.Series, score: float=None):
     role_emoji = "🧓" if row["role"]=="멘토" else "🧑‍🎓"
-    st.markdown(f"**{role_emoji} {row['name']}**  |  {row['role']}  |  {row.get('region','')}")
+    st.markdown(f"**{role_emoji} {safe_str(row['name'])}**  |  {row['role']}  |  {safe_str(row.get('region',''))}")
     st.caption(f"분야: {', '.join(deserialize_list(row.get('areas','[]')))}")
-    st.write(row.get("intro",""))
+    st.write(safe_str(row.get("intro","")))
     if row["role"]=="멘토":
         st.caption(f"경력(년): {int(row.get('experience_years',0))}")
     if score is not None:
         st.success(f"매칭 점수: {score:.3f}")
     with st.expander("연락처/상세 보기"):
-        st.write(f"이메일: {row['email']}")
+        st.write(f"이메일: {safe_str(row['email'])}")
         st.markdown(f"*소통 선호*: {', '.join(deserialize_list(row.get('comm_pref','[]')))}")
         st.markdown(f"*가능 시간*: {', '.join(deserialize_list(row.get('slots','[]')))}")
         st.markdown(f"*관심 주제*: {', '.join(deserialize_list(row.get('topics','[]')))}")
-        st.markdown(f"*목표*: {row.get('goals','')}")
+        st.markdown(f"*목표*: {safe_str(row.get('goals',''))}")
     st.divider()
 
 def find_matches():
@@ -427,8 +432,8 @@ def find_matches():
     filter_area = st.multiselect("특정 분야 필터 (선택)", AREAS, default=[])
 
     pool = df[df["role"]==("멘토" if me["role"]=="멘티" else "멘티")].copy()
-    if filter_region and me.get("region",""):
-        pool = pool[pool["region"]==me.get("region","")]
+    if filter_region and safe_str(me.get("region","")):
+        pool = pool[pool["region"]==safe_str(me.get("region",""))]
     if filter_area:
         pool = pool[pool["areas"].apply(lambda x: any(a in deserialize_list(x) for a in filter_area))]
 
@@ -489,8 +494,12 @@ def sanitize_users_csv():
     df["comm_pref"] = df["comm_pref"].apply(lambda xs: [x for x in xs if x in COMM_PREF] if isinstance(xs, list) else [])
     df["slots"] = df["slots"].apply(lambda xs: [x for x in xs if x in SLOTS] if isinstance(xs, list) else [])
     df["topics"] = df["topics"].apply(
-        lambda xs: [str(x).strip() for x in xs if isinstance(x, (str,int,float)) and str(x).strip()!=""] if isinstance(xs, list) else []
+        lambda xs: [safe_str(x).strip() for x in xs if isinstance(x, (str,int,float)) and safe_str(x).strip()!=""] if isinstance(xs, list) else []
     )
+    # 텍스트 컬럼 보정
+    for col in ["intro","goals","age","gender","region","name","email"]:
+        if col in df.columns:
+            df[col] = df[col].apply(safe_str)
     save_users(df)
 
 def admin_dashboard():
@@ -527,7 +536,7 @@ def admin_dashboard():
             mime="text/csv"
         )
     with tab3:
-        colA, colB = st.columns(2)
+        colA, colB, colC = st.columns(3)
         with colA:
             if st.button("샘플 멘토/멘티 6명 생성"):
                 seed_sample_data()
@@ -536,11 +545,12 @@ def admin_dashboard():
             if st.button("CSV 정화(옵션 외 값 제거)"):
                 sanitize_users_csv()
                 st.success("CSV 정화 완료")
-        if st.button("모든 데이터 초기화"):
-            if os.path.exists(USERS_CSV): os.remove(USERS_CSV)
-            if os.path.exists(MATCHES_CSV): os.remove(MATCHES_CSV)
-            ensure_dirs()
-            st.warning("초기화 완료. 페이지를 새로고침하세요.")
+        with colC:
+            if st.button("모든 데이터 초기화"):
+                if os.path.exists(USERS_CSV): os.remove(USERS_CSV)
+                if os.path.exists(MATCHES_CSV): os.remove(MATCHES_CSV)
+                ensure_dirs()
+                st.warning("초기화 완료. 페이지를 새로고침하세요.")
 
 def seed_sample_data():
     df = load_users()
@@ -590,7 +600,6 @@ def seed_sample_data():
         })
     df = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
     save_users(df)
-
 
 # -----------------------------
 # 메인
