@@ -1,27 +1,9 @@
 # app.py
 # ------------------------------------------------------------
 # 노인 멘토 - 청년 멘티 매칭 플랫폼 (Streamlit 단일 통합 버전)
-# - 회원가입/프로필 설문 (멘토/멘티)
-# - 점수 기반 맞춤 매칭 (태그/성향/가용시간/소통 선호/지역 등)
-# - CSV 로컬 저장 (users.csv, matches.csv) / 관리자 대시보드
-# - 한국어 UI
 # ------------------------------------------------------------
-python -m venv .venv
-source .venv/bin/activate    # Windows: .venv\Scripts\activate
-
-pip install streamlit pandas numpy scikit-learn
-
-streamlit run app.py
-
-# macOS/Linux
-export ADMIN_PASS="원하는비번"
-streamlit run app.py
-# Windows PowerShell
-$env:ADMIN_PASS="원하는비번"; streamlit run app.py
-
 import os
 import json
-import time
 import hashlib
 from datetime import datetime
 from typing import List, Dict, Any
@@ -31,37 +13,26 @@ import pandas as pd
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-
-# =============================
+# -----------------------------
 # 전역 상수 & 선택지
-# =============================
+# -----------------------------
 DATA_DIR = "data"
 USERS_CSV = os.path.join(DATA_DIR, "users.csv")
 MATCHES_CSV = os.path.join(DATA_DIR, "matches.csv")
 
-# 관리자 접근용 간단 패스워드 (환경변수 ADMIN_PASS 가 우선)
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin123")
 
 ROLES = ["멘토", "멘티"]
 
-# 관심 분야 / 전문 분야(멘토)
 AREAS = [
     "진로상담", "취업/이력서", "창업", "재무/돈관리", "인간관계", "건강/생활습관",
     "학습법", "해외경험", "공무원/공기업", "연구/석박사", "예술/창작", "IT/개발"
 ]
 
-# 멘토링 방식
 MENTORING_STYLE = ["질문응답(Q&A)", "정기 커리큘럼", "프로젝트 동행", "독서/세미나", "자유 대화"]
-
-# 소통 선호
 COMM_PREF = ["채팅", "전화", "화상", "대면"]
+SLOTS = ["평일 저녁", "평일 낮", "주말 오전", "주말 오후/저녁", "유동적"]
 
-# 매칭 가용 요일/시간 (간단 문자열 매칭)
-SLOTS = [
-    "평일 저녁", "평일 낮", "주말 오전", "주말 오후/저녁", "유동적"
-]
-
-# 성향/스타일 문항 (Likert 1~5)
 TRAIT_QUESTIONS = [
     ("구체적 조언을 선호합니다", "concrete"),
     ("긴 호흡의 장기 목표를 선호합니다", "longterm"),
@@ -70,9 +41,9 @@ TRAIT_QUESTIONS = [
     ("엄격한 피드백을 선호합니다", "strict"),
 ]
 
-# =============================
-# 유틸 함수
-# =============================
+# -----------------------------
+# 유틸
+# -----------------------------
 def ensure_dirs():
     os.makedirs(DATA_DIR, exist_ok=True)
     if not os.path.exists(USERS_CSV):
@@ -98,18 +69,21 @@ def load_users() -> pd.DataFrame:
         df = pd.read_csv(USERS_CSV, encoding="utf-8")
     except:
         df = pd.read_csv(USERS_CSV)
-    # 리스트/JSON 필드 복원
     for col in ["areas","topics","style","comm_pref","slots"]:
         if col in df.columns:
-            df[col] = df[col].fillna("").apply(lambda x: json.loads(x) if isinstance(x, str) and x.startswith("[") else ([] if x=="" else [x]))
+            df[col] = df[col].fillna("").apply(
+                lambda x: json.loads(x) if isinstance(x, str) and x.startswith("[") or x.startswith("{")
+                else ([] if x=="" else [x])
+            )
     return df
 
 def save_users(df: pd.DataFrame):
-    # 리스트/JSON 필드 직렬화
     df2 = df.copy()
     for col in ["areas","topics","style","comm_pref","slots"]:
-        if col in df2.columns:
-            df2[col] = df2[col].apply(lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, (list, dict)) else json.dumps([x], ensure_ascii=False) if x!="" else "[]")
+        df2[col] = df2[col].apply(
+            lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, (list, dict))
+            else json.dumps([x], ensure_ascii=False) if x!="" else "[]"
+        )
     df2.to_csv(USERS_CSV, index=False, encoding="utf-8")
 
 def load_matches() -> pd.DataFrame:
@@ -130,6 +104,25 @@ def new_match_id(df: pd.DataFrame) -> int:
     if len(df)==0: return 1
     return int(df["match_id"].max()) + 1
 
+def deserialize_list(x):
+    if isinstance(x, list): return x
+    if isinstance(x, str):
+        try:
+            return json.loads(x)
+        except:
+            return [s.strip() for s in x.split(",") if s.strip()]
+    return []
+
+def serialize_traits(d: Dict[str,int]) -> str:
+    return json.dumps(d, ensure_ascii=False)
+
+def deserialize_traits(s: str) -> Dict[str,int]:
+    try:
+        d = json.loads(s) if isinstance(s, str) else s
+        return {k:int(v) for k,v in d.items()}
+    except:
+        return {}
+
 def jaccard(a: List[str], b: List[str]) -> float:
     sa, sb = set(a), set(b)
     if len(sa)==0 and len(sb)==0: return 0.0
@@ -138,97 +131,70 @@ def jaccard(a: List[str], b: List[str]) -> float:
     return inter/union if union>0 else 0.0
 
 def overlap_score(a: List[str], b: List[str]) -> float:
-    # 단순 겹치는 갯수 정규화
     sa, sb = set(a), set(b)
     if len(sa)==0 or len(sb)==0: return 0.0
     return len(sa & sb) / min(len(sa), len(sb))
 
 def likert_distance(a: Dict[str,int], b: Dict[str,int]) -> float:
-    # 1~5 Likert의 코사인 유사도 대신 (5-|a-b|)/5 평균값 사용 (간단/안정)
-    if not a or not b:
-        return 0.0
+    if not a or not b: return 0.0
     keys = set(a.keys()) & set(b.keys())
     if not keys: return 0.0
-    sims = []
-    for k in keys:
-        da = a.get(k,3); db = b.get(k,3)
-        sims.append((5 - abs(da - db))/5)
+    sims = [(5 - abs(a.get(k,3)-b.get(k,3)))/5 for k in keys]
     return float(np.mean(sims)) if sims else 0.0
 
 def text_overlap(a: str, b: str) -> float:
-    # 간단 TF-IDF 코사인 유사도 (짧은 한글 문장 대응)
     texts = [a or "", b or ""]
-    if (texts[0]=="" and texts[1]==""):
-        return 0.0
-    vectorizer = TfidfVectorizer(min_df=1, ngram_range=(1,2))
-    X = vectorizer.fit_transform(texts)
-    v = (X[0].multiply(X[1])).sum() / (np.linalg.norm(X[0].toarray()) * np.linalg.norm(X[1].toarray()) + 1e-9)
-    return float(v)
+    if texts[0]=="" and texts[1]=="": return 0.0
+    vec = TfidfVectorizer(min_df=1, ngram_range=(1,2))
+    X = vec.fit_transform(texts)
+    num = (X[0].multiply(X[1])).sum()
+    den = (np.linalg.norm(X[0].toarray()) * np.linalg.norm(X[1].toarray()) + 1e-9)
+    return float(num/den)
 
-def parse_trait_answers(prefix: str) -> Dict[str, int]:
-    # st.session_state에서 trait 값 수집
+def parse_trait_answers(prefix: str) -> Dict[str,int]:
     out = {}
     for label, key in TRAIT_QUESTIONS:
-        v = st.session_state.get(f"{prefix}_{key}", 3)
-        out[key] = int(v)
+        out[key] = int(st.session_state.get(f"{prefix}_{key}", 3))
     return out
 
-def serialize_traits(d: Dict[str,int]) -> str:
-    return json.dumps(d, ensure_ascii=False)
-
-def deserialize_traits(s: str) -> Dict[str,int]:
-    try:
-        d = json.loads(s)
-        return {k:int(v) for k,v in d.items()}
-    except:
-        return {}
-
-# =============================
-# 매칭 점수 계산
-# =============================
+# -----------------------------
+# 매칭 점수
+# -----------------------------
 def compute_match_score(mentee: Dict[str,Any], mentor: Dict[str,Any]) -> float:
-    # 1) 분야/주제 겹침
-    s_area = jaccard(mentee.get("areas",[]), mentor.get("areas",[]))  # 공통 분야
-    s_topic = overlap_score(mentee.get("topics",[]), mentor.get("topics",[])) # 주제 키워드
-
-    # 2) 소통 선호 & 가용시간
+    s_area = jaccard(mentee.get("areas",[]), mentor.get("areas",[]))
+    s_topic = overlap_score(mentee.get("topics",[]), mentor.get("topics",[]))
     s_comm = jaccard(mentee.get("comm_pref",[]), mentor.get("comm_pref",[]))
     s_slot = jaccard(mentee.get("slots",[]), mentor.get("slots",[]))
 
-    # 3) 지역 보정 (동일 지역 +0.1, 인접/유동적 고려는 간단화)
     s_region = 0.1 if (mentee.get("region","")==mentor.get("region","") and mentee.get("region","")!="") else 0.0
 
-    # 4) 성향/스타일 (Likert 매칭)
-    mentee_traits = deserialize_traits(mentee.get("style","{}") if isinstance(mentee.get("style"), str) else serialize_traits(mentee.get("style")))
-    mentor_traits = deserialize_traits(mentor.get("style","{}") if isinstance(mentor.get("style"), str) else serialize_traits(mentor.get("style")))
-    s_trait = likert_distance(mentee_traits, mentor_traits)
+    s_trait = likert_distance(
+        deserialize_traits(mentee.get("style","{}")),
+        deserialize_traits(mentor.get("style","{}"))
+    )
 
-    # 5) 목표/자기소개 텍스트 유사도
     s_text = max(
         text_overlap(mentee.get("goals",""), mentor.get("intro","")),
         text_overlap(mentee.get("goals",""), mentor.get("goals",""))
     )
 
-    # 6) 멘토 경험 연차 보정 (멘토만 보유)
     exp = mentor.get("experience_years", 0)
-    s_exp = min(float(exp)/10.0, 1.0)*0.1  # 최대 +0.1
+    try:
+        exp = int(exp)
+    except:
+        exp = 0
+    s_exp = min(float(exp)/10.0, 1.0)*0.1
 
-    # 가중합 (총 1.0 기준)
     score = (
-        0.25*s_area +
-        0.15*s_topic +
-        0.15*s_trait +
-        0.10*s_comm +
-        0.10*s_slot +
-        0.10*s_text +
-        s_region +
-        s_exp
+        0.25*s_area + 0.15*s_topic + 0.15*s_trait +
+        0.10*s_comm + 0.10*s_slot + 0.10*s_text +
+        s_region + s_exp
     )
     return round(float(score), 4)
 
-# =============================
-# UI 컴포넌트
-# =============================
+# -----------------------------
+# UI
+# -----------------------------
 def header():
     st.markdown("## 👵🧓 노인 멘토 – 👩‍🎓👨‍🎓 청년 멘티 매칭 플랫폼")
     st.caption("가입 설문을 바탕으로 맞춤형 멘토-멘티를 추천합니다.")
@@ -244,7 +210,7 @@ def login_box():
     st.subheader("로그인")
     email = st.text_input("이메일", key="login_email")
     pw = st.text_input("비밀번호", type="password", key="login_pw")
-    col1, col2 = st.columns([1,1])
+    col1, col2 = st.columns(2)
     with col1:
         if st.button("로그인"):
             df = load_users()
@@ -267,7 +233,7 @@ def login_box():
 
 def signup_box():
     st.subheader("회원가입")
-    role = st.selectbox("역할 선택", ROLES, index=1)  # 기본 멘티
+    role = st.selectbox("역할 선택", ROLES, index=1)
     name = st.text_input("이름")
     email = st.text_input("이메일(로그인 ID)")
     pw = st.text_input("비밀번호", type="password")
@@ -285,24 +251,15 @@ def signup_box():
             return
         uid = new_user_id(df)
         new_row = {
-            "user_id": uid,
-            "role": role,
-            "name": name,
-            "email": email,
-            "pass_hash": hash_pw(pw),
-            "age": "",
-            "gender": "",
-            "region": "",
+            "user_id": uid, "role": role, "name": name, "email": email,
+            "pass_hash": hash_pw(pw), "age": "", "gender": "", "region": "",
             "areas": json.dumps([], ensure_ascii=False),
             "topics": json.dumps([], ensure_ascii=False),
             "style": json.dumps({}, ensure_ascii=False),
             "comm_pref": json.dumps([], ensure_ascii=False),
             "slots": json.dumps([], ensure_ascii=False),
-            "experience_years": 0,
-            "intro": "",
-            "goals": "",
-            "created_at": now_str(),
-            "updated_at": now_str(),
+            "experience_years": 0, "intro": "", "goals": "",
+            "created_at": now_str(), "updated_at": now_str(),
         }
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         save_users(df)
@@ -321,8 +278,7 @@ def profile_form():
     user = df[df["user_id"]==st.session_state["user_id"]].iloc[0]
     st.subheader("프로필 설문")
 
-    # 기본정보
-    c1, c2, c3 = st.columns([1,1,1])
+    c1, c2, c3 = st.columns(3)
     with c1:
         age = st.text_input("나이(선택)", value=str(user.get("age","") if not pd.isna(user.get("age","")) else ""))
     with c2:
@@ -330,30 +286,21 @@ def profile_form():
     with c3:
         region = st.text_input("지역(예: 서울, 고양, 부산 등)", value=str(user.get("region","") if not pd.isna(user.get("region","")) else ""))
 
-    # 분야/주제
     areas = st.multiselect("관심/전문 분야 선택", AREAS, default=deserialize_list(user.get("areas")))
     topics_txt = st.text_area("관심 주제 키워드 (쉼표로 구분)", value=",".join(deserialize_list(user.get("topics"))))
-
-    # 소통 & 시간
     comms = st.multiselect("소통 선호", COMM_PREF, default=deserialize_list(user.get("comm_pref")))
     slots = st.multiselect("가능 요일/시간", SLOTS, default=deserialize_list(user.get("slots")))
 
-    # 성향/스타일
     trait_block(prefix="trait", title="멘토링 성향/스타일")
 
-    # 멘토/멘티별 추가항목
     intro = st.text_area("자기소개 (멘토는 경력/강점 포함 권장)", value=str(user.get("intro","") if not pd.isna(user.get("intro","")) else ""))
     goals = st.text_area("목표/요청사항 (무엇을 얻고 싶은가?)", value=str(user.get("goals","") if not pd.isna(user.get("goals","")) else ""))
 
     exp_years = 0
     if user["role"] == "멘토":
-        exp_years = st.number_input("멘토링 관련/직무 경력 (년)", min_value=0, max_value=50, value=int(user.get("experience_years",0) if not pd.isna(user.get("experience_years",0)) else 0))
-        style_desc = "멘토 성향"
-    else:
-        style_desc = "멘티 성향"
+        exp_years = st.number_input("멘토링 관련/직무 경력 (년)", 0, 50, int(user.get("experience_years",0) if not pd.isna(user.get("experience_years",0)) else 0))
 
     if st.button("저장"):
-        # 세이브
         idx = df[df["user_id"]==st.session_state["user_id"]].index[0]
         df.at[idx, "age"] = age
         df.at[idx, "gender"] = gender
@@ -371,16 +318,24 @@ def profile_form():
         save_users(df)
         st.success("프로필이 저장되었습니다.")
 
-    st.caption(f"※ {style_desc}은 1(전혀 아님) ~ 5(매우 그렇다)로 설정합니다.")
-
-def deserialize_list(x):
-    if isinstance(x, list): return x
-    if isinstance(x, str):
-        try:
-            return json.loads(x)
-        except:
-            return [s.strip() for s in x.split(",") if s.strip()]
-    return []
+def row_to_userdict(row: pd.Series) -> Dict[str,Any]:
+    return {
+        "user_id": int(row["user_id"]),
+        "role": row["role"],
+        "name": row["name"],
+        "email": row["email"],
+        "age": row.get("age",""),
+        "gender": row.get("gender",""),
+        "region": row.get("region",""),
+        "areas": deserialize_list(row.get("areas","[]")),
+        "topics": deserialize_list(row.get("topics","[]")),
+        "style": deserialize_traits(row.get("style","{}")),
+        "comm_pref": deserialize_list(row.get("comm_pref","[]")),
+        "slots": deserialize_list(row.get("slots","[]")),
+        "experience_years": int(row.get("experience_years",0) if not pd.isna(row.get("experience_years",0)) else 0),
+        "intro": row.get("intro",""),
+        "goals": row.get("goals",""),
+    }
 
 def user_card(row: pd.Series, score: float=None):
     role_emoji = "🧓" if row["role"]=="멘토" else "🧑‍🎓"
@@ -416,13 +371,7 @@ def find_matches():
     filter_region = st.checkbox("같은 지역 우선 보기", value=False)
     filter_area = st.multiselect("특정 분야 필터 (선택)", AREAS, default=[])
 
-    # 역할 반대편 찾기
-    if me["role"]=="멘티":
-        pool = df[df["role"]=="멘토"].copy()
-    else:
-        pool = df[df["role"]=="멘티"].copy()
-
-    # 선택 필터 적용
+    pool = df[df["role"]==("멘토" if me["role"]=="멘티" else "멘티")].copy()
     if filter_region and me.get("region",""):
         pool = pool[pool["region"]==me.get("region","")]
     if filter_area:
@@ -432,7 +381,6 @@ def find_matches():
         st.warning("조건에 맞는 대상이 없습니다. 필터를 완화해보세요.")
         return
 
-    # 점수 계산
     me_dict = row_to_userdict(me)
     scores = []
     for _, r in pool.iterrows():
@@ -443,11 +391,9 @@ def find_matches():
     pool["score"] = scores
     pool = pool.sort_values(by="score", ascending=False)
 
-    # 표시
     for _, r in pool.head(topk).iterrows():
         user_card(r, score=r["score"])
 
-    # 저장(선택)
     if st.button("위 추천 결과를 '내 매칭'에 저장"):
         mdf = load_matches()
         created = []
@@ -464,25 +410,6 @@ def find_matches():
         save_matches(mdf)
         st.success(f"저장 완료! (매칭 ID: {created})")
 
-def row_to_userdict(row: pd.Series) -> Dict[str,Any]:
-    return {
-        "user_id": int(row["user_id"]),
-        "role": row["role"],
-        "name": row["name"],
-        "email": row["email"],
-        "age": row.get("age",""),
-        "gender": row.get("gender",""),
-        "region": row.get("region",""),
-        "areas": deserialize_list(row.get("areas","[]")),
-        "topics": deserialize_list(row.get("topics","[]")),
-        "style": deserialize_traits(row.get("style","{}")),
-        "comm_pref": deserialize_list(row.get("comm_pref","[]")),
-        "slots": deserialize_list(row.get("slots","[]")),
-        "experience_years": int(row.get("experience_years",0) if not pd.isna(row.get("experience_years",0)) else 0),
-        "intro": row.get("intro",""),
-        "goals": row.get("goals",""),
-    }
-
 def my_matches():
     if "user_id" not in st.session_state:
         st.info("먼저 로그인하세요.")
@@ -490,8 +417,6 @@ def my_matches():
     st.subheader("내 매칭")
     mdf = load_matches()
     df = load_users()
-
-    # 내가 요청한 매칭
     mine = mdf[mdf["src_user"]==st.session_state["user_id"]].sort_values(by="score", ascending=False)
     if len(mine)==0:
         st.caption("아직 저장된 매칭이 없습니다. '매칭 찾기'에서 저장해보세요.")
@@ -536,7 +461,6 @@ def admin_dashboard():
             mime="text/csv"
         )
     with tab3:
-        st.markdown("### 샘플 데이터 주입(선택)")
         if st.button("샘플 멘토/멘티 6명 생성"):
             seed_sample_data()
             st.success("샘플 데이터가 생성되었습니다.")
@@ -581,31 +505,23 @@ def seed_sample_data():
     t = now_str()
     for i, u in enumerate(mentors + mentees):
         rows.append({
-            "user_id": base_id+i,
-            "role": u["role"],
-            "name": u["name"],
-            "email": u["email"],
-            "pass_hash": u["pass_hash"],
-            "age": "",
-            "gender": "",
-            "region": u["region"],
+            "user_id": base_id+i, "role": u["role"], "name": u["name"], "email": u["email"],
+            "pass_hash": u["pass_hash"], "age": "", "gender": "", "region": u["region"],
             "areas": json.dumps(u["areas"], ensure_ascii=False),
             "topics": json.dumps(u["topics"], ensure_ascii=False),
             "style": json.dumps(u["style"], ensure_ascii=False),
             "comm_pref": json.dumps(u["comm_pref"], ensure_ascii=False),
             "slots": json.dumps(u["slots"], ensure_ascii=False),
             "experience_years": u["experience_years"] if u["role"]=="멘토" else 0,
-            "intro": u["intro"],
-            "goals": u["goals"],
-            "created_at": t,
-            "updated_at": t,
+            "intro": u["intro"], "goals": u["goals"],
+            "created_at": t, "updated_at": t,
         })
     df = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
     save_users(df)
 
-# =============================
+# -----------------------------
 # 메인
-# =============================
+# -----------------------------
 def main():
     st.set_page_config(page_title="멘토-멘티 매칭", page_icon="🤝", layout="wide")
     ensure_dirs()
@@ -615,19 +531,17 @@ def main():
     if page == "홈":
         st.markdown("""
         ### 어떻게 동작하나요?
-        1) **회원가입/로그인**  
-        2) **프로필 설문** 작성 (관심/전문 분야, 소통 선호, 가용 시간, 성향, 목표 등)  
-        3) **매칭 찾기**에서 맞춤 추천 확인 및 저장  
-        4) **내 매칭**에서 저장한 추천을 확인하고 이메일로 직접 연락  
+        1) **회원가입/로그인**
+        2) **프로필 설문** 작성
+        3) **매칭 찾기**에서 맞춤 추천 확인 및 저장
+        4) **내 매칭**에서 저장한 추천 확인
         """)
         st.info("관리자 비밀번호 기본값: admin123 (환경변수 ADMIN_PASS 로 변경 가능)")
 
     elif page == "회원가입/로그인":
-        col1, col2 = st.columns([1,1])
-        with col1:
-            signup_box()
-        with col2:
-            login_box()
+        col1, col2 = st.columns(2)
+        with col1: signup_box()
+        with col2: login_box()
 
     elif page == "프로필 설문":
         profile_form()
