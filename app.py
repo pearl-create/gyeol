@@ -258,27 +258,32 @@ with st.form("mentee_form"):
     gender = st.radio("성별", GENDERS, horizontal=True, index=0)
     age_band = st.selectbox("나이대", AGE_BANDS, index=0)
 
-    # 아바타 업로드 및 선택
+    # 아바타 선택 (사전 제공된 이미지 목록에서 선택)
     st.markdown("### 내 아바타 선택")
-    avatar_files = st.file_uploader(
-        "아바타 이미지 업로드 (여러 장 가능)",
-        type=["png","jpg","jpeg","webp"],
-        accept_multiple_files=True,
-        help="업로드한 이미지 중 하나를 선택하면 결과 카드에 함께 표시됩니다."
+    AVATAR_PATHS = [
+        "/mnt/data/KakaoTalk_20250919_142949391.png",
+        "/mnt/data/KakaoTalk_20250919_142949391_01.png",
+        "/mnt/data/KakaoTalk_20250919_142949391_02.png",
+        "/mnt/data/KakaoTalk_20250919_142949391_03.png",
+        "/mnt/data/KakaoTalk_20250919_142949391_04.png",
+        "/mnt/data/KakaoTalk_20250919_142949391_05.png",
+    ]
+
+    # 썸네일 프리뷰
+    cols_ava = st.columns(3)
+    for i, p in enumerate(AVATAR_PATHS):
+        with cols_ava[i % 3]:
+            st.image(p, caption=f"아바타 {i+1}", use_container_width=True)
+
+    avatar_label = st.selectbox(
+        "사용할 아바타 선택",
+        [f"아바타 {i+1}" for i in range(len(AVATAR_PATHS))],
+        index=0,
     )
-    selected_avatar_idx = None
-    if avatar_files:
-        cols_ava = st.columns(min(4, len(avatar_files)))
-        for i_ava, f_ava in enumerate(avatar_files):
-            with cols_ava[i_ava % len(cols_ava)]:
-                st.image(f_ava, caption=f_ava.name, use_container_width=True)
-        names_ava = [f.name for f in avatar_files]
-        selected_name = st.selectbox("사용할 아바타 선택", names_ava)
-        selected_avatar_idx = names_ava.index(selected_name)
-        st.session_state['selected_avatar_bytes'] = avatar_files[selected_avatar_idx].getvalue()
-        st.session_state['selected_avatar_name'] = selected_name
-    else:
-        st.info("아바타 이미지를 업로드하면 결과 카드에 함께 표시됩니다.")
+    sel_idx = int(avatar_label.split()[-1]) - 1
+    with open(AVATAR_PATHS[sel_idx], "rb") as f:
+        st.session_state['selected_avatar_bytes'] = f.read()
+        st.session_state['selected_avatar_name'] = avatar_label
 
     st.markdown("### 소통 선호")
     comm_modes = st.multiselect("선호하는 소통 방법(복수)", COMM_MODES, default=["일반 채팅"])
@@ -289,11 +294,16 @@ with st.form("mentee_form"):
         "소통 스타일 — 평소 대화 시 본인과 비슷한 유형",
         STYLES,
         help=(
-            "연두부형: 조용하고 차분, 경청·공감"
-            "분위기메이커형: 활발·주도"
-            "효율추구형: 목표·체계"
-            "댕댕이형: 자유롭고 즉흥"
-            "감성 충만형: 위로·지지 지향"
+            "연두부형: 조용하고 차분, 경청·공감
+"
+            "분위기메이커형: 활발·주도
+"
+            "효율추구형: 목표·체계
+"
+            "댕댕이형: 자유롭고 즉흥
+"
+            "감성 충만형: 위로·지지 지향
+"
             "냉철한 조언자형: 논리·문제 해결"
         ),
     )
