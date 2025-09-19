@@ -16,6 +16,7 @@
 
 import io
 from typing import Set, Dict
+import os
 
 import pandas as pd
 import streamlit as st
@@ -247,7 +248,20 @@ def load_default_csv() -> pd.DataFrame:
          "topic_prefs": "인생 경험·삶의 가치관, 건강·웰빙", "intro": "경청 중심의 상담을 합니다."}
     ])
 
-mentors_df = load_default_csv()
+# 관리자(운영자) 전용 업로드: URL에 ?admin=1 이 있으면 보임
+params = st.experimental_get_query_params()
+ADMIN_MODE = params.get("admin", ["0"])[0] == "1"
+
+if ADMIN_MODE:
+    with st.expander("관리자 전용: 멘토 CSV 업로드", expanded=False):
+        admin_up = st.file_uploader("멘토 데이터 CSV 업로드 (columns: name, gender, age_band, ...)", type=["csv"], key="admin_csv")
+        if admin_up is not None:
+            mentors_df = pd.read_csv(admin_up)
+        else:
+            mentors_df = load_default_csv()
+else:
+    mentors_df = load_default_csv()
+
 st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명")
 
 st.markdown("---")
@@ -270,21 +284,58 @@ with st.form("mentee_form"):
         "/mnt/data/KakaoTalk_20250919_142949391_05.png",
     ]
 
-    # 썸네일 프리뷰
-    cols_ava = st.columns(3)
-    for i, p in enumerate(AVATAR_PATHS):
-        with cols_ava[i % 3]:
-            st.image(p, caption=f"아바타 {i+1}", use_container_width=True)
+    # 존재하는 파일만 사용
+    AVATAR_PATHS = [p for p in AVATAR_PATHS if os.path.exists(p)]
 
-    avatar_label = st.selectbox(
-        "사용할 아바타 선택",
-        [f"아바타 {i+1}" for i in range(len(AVATAR_PATHS))],
-        index=0,
-    )
-    sel_idx = int(avatar_label.split()[-1]) - 1
-    with open(AVATAR_PATHS[sel_idx], "rb") as f:
-        st.session_state['selected_avatar_bytes'] = f.read()
-        st.session_state['selected_avatar_name'] = avatar_label
+    # 만약 사전 제공 아바타가 하나도 없으면, 사용자 업로드로 대체
+    uploaded_avatars = None
+    if not AVATAR_PATHS:
+        uploaded_avatars = st.file_uploader(
+            "아바타 이미지 업로드 (여러 장 가능)",
+            type=["png","jpg","jpeg","webp"],
+            accept_multiple_files=True,
+            key="avatar_uploader_backup",
+            help="사전 제공 이미지가 없을 때만 노출됩니다.")
+        if uploaded_avatars:
+            AVATAR_PATHS = []  # 표시용 경로는 비우고, 아래에서 bytes 기반으로 처리
+
+    # 썸네일 프리뷰(파일 경로가 있을 때만)
+    avatar_labels = []
+    if AVATAR_PATHS:
+        cols_ava = st.columns(3)
+        for i, p in enumerate(AVATAR_PATHS):
+            with cols_ava[i % 3]:
+                try:
+                    st.image(p, caption=f"아바타 {i+1}", use_container_width=True)
+                    avatar_labels.append(f"아바타 {i+1}")
+                except Exception:
+                    # 이미지 로드 실패 시 건너뜀
+                    pass
+    elif uploaded_avatars:
+        cols_ava = st.columns(3)
+        for i, f in enumerate(uploaded_avatars):
+            with cols_ava[i % 3]:
+                st.image(f, caption=f.name, use_container_width=True)
+        avatar_labels = [f.name for f in uploaded_avatars]
+
+    if avatar_labels:
+        selected = st.selectbox("사용할 아바타 선택", avatar_labels, index=0)
+        if AVATAR_PATHS:
+            # 아바타 1..N 라벨을 경로에 매핑
+            sel_idx = avatar_labels.index(selected)
+            try:
+                with open(AVATAR_PATHS[sel_idx], "rb") as f:
+                    st.session_state['selected_avatar_bytes'] = f.read()
+                    st.session_state['selected_avatar_name'] = selected
+            except Exception:
+                st.warning("선택한 아바타 이미지를 불러오지 못했습니다.")
+        else:
+            # 업로드 객체에서 직접 바이트 사용
+            sel_idx = avatar_labels.index(selected)
+            st.session_state['selected_avatar_bytes'] = uploaded_avatars[sel_idx].getvalue()
+            st.session_state['selected_avatar_name'] = selected
+    else:
+        st.info("사용 가능한 아바타 이미지가 없습니다. 관리자에게 문의해주세요.")
 
     st.markdown("### 소통 선호")
     comm_modes = st.multiselect("선호하는 소통 방법(복수)", COMM_MODES, default=["일반 채팅"])
