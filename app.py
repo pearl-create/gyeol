@@ -232,8 +232,7 @@ st.caption("입력 데이터는 체험 종료 시 삭제됩니다. QR/다운로�
 @st.cache_data(show_spinner=False)
 def load_default_csv() -> pd.DataFrame:
     paths = [
-        "gyeol_dummy_mentors_20.csv",
-        "/mnt/data/gyeol_dummy_mentors_20.csv",
+        "C:/Users/user/Downloads/결 더미 멘토  - ________20_.csv",
     ]
     for p in paths:
         try:
