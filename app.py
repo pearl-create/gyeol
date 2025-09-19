@@ -237,15 +237,7 @@ def load_default_csv() -> pd.DataFrame:
     for p in paths:
         try:
             return pd.read_csv(p)
-        except Exception:
-            continue
-    return pd.DataFrame([
-        {"name": "김샘", "gender": "남", "age_band": "40–49", "occupation_major": "교육",
-         "occupation_minor": "고등학교 교사", "comm_modes": "대면 만남, 일반 채팅",
-         "comm_time": "오전, 오후", "comm_days": "월, 수, 금", "style": "연두부형",
-         "interests": "독서, 인문학, 건강/웰빙", "purpose": "사회, 인생 경험 공유, 정서적 지지와 대화",
-         "topic_prefs": "인생 경험·삶의 가치관, 건강·웰빙", "intro": "경청 중심의 상담을 합니다."}
-    ])
+      
 
 # 관리자(운영자) 전용 업로드: URL에 ?admin=1 이 있으면 보임
 params = st.query_params
