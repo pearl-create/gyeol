@@ -1,21 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-결(結) — 멘티 전용 박람회 체험용 매칭 데모 앱 (수정 버전)
+결(結) — 멘티 전용 박람회 체험용 매칭 데모 앱 (전체 코드)
 
-변경사항
-- 멘토 데이터 입력 UI 제거: 기본 CSV 자동 로드만 수행
-- "2) 멘티 설문" → "2) 연결될 준비"로 변경
-- 나이대 선택 직후 아바타 업로드/선택 UI 추가(여러 장 업로드 후 하나 선택)
-- 결과 카드에 선택한 아바타 썸네일 표시
+변경 요약
+- 멘토 데이터 입력 UI 제거(기본 CSV 자동 로드)
+- "2) 멘티 설문" → "2) 연결될 준비" 제목 변경
+- 나이대 선택 직후 아바타(사전 제공 6장) 선택 UI 추가
+- style selectbox의 help를 삼중 따옴표로 교정(문법 오류 해결)
+- 추천 카드 상단에 선택한 아바타 표시
+- 간단한 **내부 테스트 패널(debug)** 추가: 점수 계산이 0~100인지 확인
 
 실행
-- streamlit run gyeol_mentee_demo_app.py
+    streamlit run gyeol_mentee_demo_app.py
 """
 
 import io
-from typing import List, Set, Dict
+from typing import Set, Dict
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -293,19 +294,12 @@ with st.form("mentee_form"):
     style = st.selectbox(
         "소통 스타일 — 평소 대화 시 본인과 비슷한 유형",
         STYLES,
-        help=(
-            "연두부형: 조용하고 차분, 경청·공감
-"
-            "분위기메이커형: 활발·주도
-"
-            "효율추구형: 목표·체계
-"
-            "댕댕이형: 자유롭고 즉흥
-"
-            "감성 충만형: 위로·지지 지향
-"
-            "냉철한 조언자형: 논리·문제 해결"
-        ),
+        help="""연두부형: 조용하고 차분, 경청·공감
+분위기메이커형: 활발·주도
+효율추구형: 목표·체계
+댕댕이형: 자유롭고 즉흥
+감성 충만형: 위로·지지 지향
+냉철한 조언자형: 논리·문제 해결""",
     )
 
     st.markdown("### 관심사·취향")
@@ -316,14 +310,29 @@ with st.form("mentee_form"):
         )
 
     st.markdown("### 멘토링 목적·주제")
-    purpose = st.multiselect("멘토링을 통해 얻고 싶은 것(복수)", PURPOSES, default=["진로 / 커리어 조언", "학업 / 전문지식 조언"])
-    topics = st.multiselect("주로 이야기하고 싶은 주제(복수)", TOPIC_PREFS, default=["진로·직업", "학업·전문 지식"])
+    purpose = st.multiselect(
+        "멘토링을 통해 얻고 싶은 것(복수)",
+        PURPOSES,
+        default=["진로 / 커리어 조언", "학업 / 전문지식 조언"],
+    )
+    topics = st.multiselect(
+        "주로 이야기하고 싶은 주제(복수)",
+        TOPIC_PREFS,
+        default=["진로·직업", "학업·전문 지식"],
+    )
 
     st.markdown("### 희망 멘토 정보")
-    wanted_majors = st.multiselect("관심 멘토 직군(복수)", OCCUPATION_MAJORS, default=["연구개발/ IT", "교육", "법률/행정"])
+    wanted_majors = st.multiselect(
+        "관심 멘토 직군(복수)", OCCUPATION_MAJORS,
+        default=["연구개발/ IT", "교육", "법률/행정"],
+    )
     wanted_mentor_ages = st.multiselect("멘토 선호 나이대(선택)", AGE_BANDS, default=[])
 
-    note = st.text_area("한 줄 요청사항(선택, 100자 이내)", max_chars=120, placeholder="예: 데이터 분석 직무 이직 준비 중, 포트폴리오 피드백 받고 싶어요")
+    note = st.text_area(
+        "한 줄 요청사항(선택, 100자 이내)",
+        max_chars=120,
+        placeholder="예: 데이터 분석 직무 이직 준비 중, 포트폴리오 피드백 받고 싶어요",
+    )
 
     submitted = st.form_submit_button("추천 멘토 보기", use_container_width=True)
 
@@ -343,7 +352,7 @@ mentee_payload = {
     "interests": set(interests),
     "purpose": set(purpose),
     "topics": set(topics),
-    "wanted_majors": set(wanted_ajors) if False else set(wanted_majors),  # typing hint guard
+    "wanted_majors": set(wanted_majors),
     "wanted_mentor_ages": set(wanted_mentor_ages),
     "note": (note or "").strip(),
 }
@@ -366,7 +375,9 @@ if not ranked:
 for i, item in enumerate(ranked, start=1):
     r = mentors_df.loc[item["idx"]]
     with st.container(border=True):
-        st.markdown(f"### #{i}. {r.get('name','(이름없음)')} · {str(r.get('occupation_major','')).strip()} · {str(r.get('age_band','')).strip()}")
+        st.markdown(
+            f"### #{i}. {r.get('name','(이름없음)')} · {str(r.get('occupation_major','')).strip()} · {str(r.get('age_band','')).strip()}"
+        )
         # 아바타 표시 (선택된 경우)
         if 'selected_avatar_bytes' in st.session_state:
             st.image(st.session_state['selected_avatar_bytes'], width=96)
@@ -374,19 +385,12 @@ for i, item in enumerate(ranked, start=1):
         with cols[0]:
             st.write(f"**총점**: {item['total']}점")
             bd = item["breakdown"]
-            st.write(
-                f"- 목적·주제: {bd['목적·주제']}
-"
-                f"- 소통 선호: {bd['소통 선호']}
-"
-                f"- 관심사/성향: {bd['관심사/성향']}
-"
-                f"- 멘토 적합도: {bd['멘토 적합도']}
-"
-                f"- 텍스트: {bd['텍스트']}
-"
-                f"- 스타일: {bd['스타일']}"
-            )
+            st.write("- 목적·주제: ", bd['목적·주제'])
+            st.write("- 소통 선호: ", bd['소통 선호'])
+            st.write("- 관심사/성향: ", bd['관심사/성향'])
+            st.write("- 멘토 적합도: ", bd['멘토 적합도'])
+            st.write("- 텍스트: ", bd['텍스트'])
+            st.write("- 스타일: ", bd['스타일'])
         with cols[1]:
             st.write("**소통 가능**")
             st.write("방법: ", r.get("comm_modes", "-"))
@@ -418,5 +422,48 @@ st.download_button(
     mime="text/csv",
     use_container_width=True,
 )
+
+# -----------------------------
+# 내부 테스트(간단) — 앱 우측 하단에 표시
+# -----------------------------
+with st.expander("내부 테스트(디버그)"):
+    try:
+        if len(mentors_df) > 0:
+            _dummy_mentee = {
+                "purpose": {"진로 / 커리어 조언"},
+                "topics": {"진로·직업"},
+                "comm_modes": {"일반 채팅"},
+                "time_slots": {"오후"},
+                "days": {"화"},
+                "interests": {"독서", "여행"},
+                "wanted_majors": {"연구개발/ IT"},
+                "wanted_mentor_ages": {"만 30세~39세"},
+                "style": "연두부형",
+                "note": "데이터 분야 진로 상담"
+            }
+            test_score = compute_score(_dummy_mentee, mentors_df.iloc[0])
+            ok_range = 0 <= test_score["total"] <= 100
+            st.write("테스트1 — 점수 범위(0~100):", "PASS" if ok_range else "FAIL", test_score)
+        # 스타일 보완형 테스트
+        from types import SimpleNamespace
+        fake_row = SimpleNamespace(
+            **{"comm_modes":"","comm_time":"","comm_days":"","interests":"",
+               "purpose":"","topic_prefs":"","style":"분위기메이커형","occupation_major":"",
+               "intro":"","age_band":"만 30세~39세"}
+        )
+        st.write("테스트2 — 스타일 보완 가산점:", compute_score({
+            "purpose": set(),
+            "topics": set(),
+            "comm_modes": set(),
+            "time_slots": set(),
+            "days": set(),
+            "interests": set(),
+            "wanted_majors": set(),
+            "wanted_mentor_ages": set(),
+            "style": "연두부형",
+            "note": ""
+        }, pd.Series(vars(fake_row))))
+    except Exception as e:
+        st.error(f"내부 테스트 실패: {e}")
 
 st.caption("※ 본 데모는 설명 가능한 규칙 + 경량 텍스트 유사도를 사용합니다. 가중치 조정 및 유사군 확장은 코드 상단 상수에서 쉽게 변경 가능합니다.")
