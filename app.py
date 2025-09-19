@@ -279,12 +279,13 @@ with st.form("mentee_form"):
 
     # 1) 기본 제공 아바타 경로들
     base_avatar_paths = [
-        "/mnt/data/KakaoTalk_20250919_142949391.png",
-        "/mnt/data/KakaoTalk_20250919_142949391_01.png",
-        "/mnt/data/KakaoTalk_20250919_142949391_02.png",
-        "/mnt/data/KakaoTalk_20250919_142949391_03.png",
-        "/mnt/data/KakaoTalk_20250919_142949391_04.png",
-        "/mnt/data/KakaoTalk_20250919_142949391_05.png",
+        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391.png",
+        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391_01.png",
+        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391_02.png",
+        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391_03.png",
+        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391_04.png",
+        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391_05.png",
+
     ]
     base_avatar_paths = [p for p in base_avatar_paths if os.path.exists(p)]
 
