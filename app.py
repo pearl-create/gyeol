@@ -1,22 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-결(結) — 멘티 전용 박람회 체험용 매칭 데모 앱
+결(結) — 멘티 전용 박람회 체험용 매칭 데모 앱 (수정 버전)
 
-요구사항 요약
-- 로그인/회원가입 없음: 즉시 설문 → 추천 멘토 카드 노출
-- 더미 멘토 20명 CSV 사용 (사용자 업로드도 허용)
-- 소통 방법/시간대/요일, 관심사, 목적/주제, 희망 직군, 스타일(6종) 반영
-- 100점 만점 가중합 매칭 및 근거 분해 표시
-
-필요 패키지
-- streamlit, pandas, numpy, scikit-learn
+변경사항
+- 멘토 데이터 입력 UI 제거: 기본 CSV 자동 로드만 수행
+- "2) 멘티 설문" → "2) 연결될 준비"로 변경
+- 나이대 선택 직후 아바타 업로드/선택 UI 추가(여러 장 업로드 후 하나 선택)
+- 결과 카드에 선택한 아바타 썸네일 표시
 
 실행
 - streamlit run gyeol_mentee_demo_app.py
 """
 
 import io
-import math
 from typing import List, Set, Dict
 
 import numpy as np
@@ -43,7 +39,7 @@ STYLES = [
     "연두부형", "분위기메이커형", "효율추구형", "댕댕이형", "감성 충만형", "냉철한 조언자형"
 ]
 
-# 직군(대분류) — 사용자 합의된 목록 그대로 사용
+# 직군(대분류)
 OCCUPATION_MAJORS = [
     "경영자", "행정관리", "의학/보건", "법률/행정", "교육", "연구개발/ IT",
     "예술/디자인", "기술/기능", "서비스 전문", "일반 사무", "영업 원",
@@ -52,7 +48,7 @@ OCCUPATION_MAJORS = [
     "학생", "전업주부", "구직자 / 최근 퇴사자 / 프리랜서(임시)", "기타"
 ]
 
-# 관심사 카테고리 키(표시용 라벨 == 저장용 값)
+# 관심사 카테고리
 INTERESTS = {
     "여가/취미": ["독서", "음악 감상", "영화/드라마 감상", "게임", "운동/스포츠 관람", "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래"],
     "학문/지적 관심사": ["인문학", "사회과학", "자연과학", "수학/논리 퍼즐", "IT/테크놀로지", "환경/지속가능성"],
@@ -103,12 +99,11 @@ def style_score(mentee_style: str, mentor_style: str) -> int:
     if mentee_style and mentor_style:
         if mentee_style == mentor_style:
             return 5  # 동일형 가점
-        # 보완형 체크(순서 무관)
         pair = (mentee_style, mentor_style)
         rev_pair = (mentor_style, mentee_style)
         if pair in COMPLEMENT_PAIRS or rev_pair in COMPLEMENT_PAIRS:
             return 10
-        return 3  # 기타 조합 소폭 가점
+        return 3
     return 0
 
 
@@ -117,7 +112,6 @@ def major_score(wanted_majors: Set[str], mentor_major: str) -> int:
         return 0
     if mentor_major in wanted_majors:
         return 12
-    # 유사군 확인
     for a, b in SIMILAR_MAJORS:
         if (a in wanted_majors and mentor_major == b) or (b in wanted_majors and mentor_major == a):
             return 6
@@ -125,7 +119,6 @@ def major_score(wanted_majors: Set[str], mentor_major: str) -> int:
 
 
 def age_band_normalize(label: str) -> str:
-    # 멘토 CSV는 다양 표기 가능 → 핵심 패턴만 보정
     s = str(label).strip()
     if s.startswith("20") or "20" in s:
         return "만 20세~29세"
@@ -145,7 +138,7 @@ def age_band_normalize(label: str) -> str:
         return "만 90세 이상"
     if "13" in s or "19" in s:
         return "만 13세~19세"
-    return s  # 그대로 반환
+    return s
 
 
 def age_preference_score(preferred: Set[str], mentor_age_band: str) -> int:
@@ -153,9 +146,7 @@ def age_preference_score(preferred: Set[str], mentor_age_band: str) -> int:
         return 0
     mentor_age = age_band_normalize(mentor_age_band)
     if mentor_age in preferred:
-        return 6  # 선호 범위 일치
-    # 인접 나이대: 근사치 2점
-    # 간단 근사: 문자열 인덱스 기반
+        return 6
     idx_map = {k: i for i, k in enumerate(AGE_BANDS)}
     if mentor_age in idx_map:
         m_idx = idx_map[mentor_age]
@@ -179,8 +170,6 @@ def tfidf_similarity(text_a: str, text_b: str) -> float:
 # -----------------------------
 
 def compute_score(mentee: Dict, mentor_row: pd.Series) -> Dict:
-    """멘티 입력과 멘토 1명의 필드로 점수 계산 + 근거 분해 반환"""
-    # 멘토 필드 파싱
     mentor_comm_modes = list_to_set(mentor_row.get("comm_modes", ""))
     mentor_comm_times = list_to_set(mentor_row.get("comm_time", ""))
     mentor_comm_days = list_to_set(mentor_row.get("comm_days", ""))
@@ -192,31 +181,25 @@ def compute_score(mentee: Dict, mentor_row: pd.Series) -> Dict:
     mentor_intro = str(mentor_row.get("intro", "")).strip()
     mentor_age_band = str(mentor_row.get("age_band", "")).strip()
 
-    # 1) 목적·주제 (30)
     purpose_ratio = ratio_overlap(mentee["purpose"], mentor_purposes)
     topics_ratio = ratio_overlap(mentee["topics"], mentor_topics)
     s_purpose_topics = round(purpose_ratio * 18 + topics_ratio * 12)
 
-    # 2) 소통 선호 (20) = 방식(8) + 시간(6) + 요일(6)
     modes_ratio = ratio_overlap(mentee["comm_modes"], mentor_comm_modes)
     times_ratio = ratio_overlap(mentee["time_slots"], mentor_comm_times)
     days_ratio = ratio_overlap(mentee["days"], mentor_comm_days)
     s_comm = round(modes_ratio * 8 + times_ratio * 6 + days_ratio * 6)
 
-    # 3) 관심사·성향 (20) — 단순 교집합 비율로 근사
     interest_ratio = ratio_overlap(mentee["interests"], mentor_interests)
     s_interests = round(interest_ratio * 20)
 
-    # 4) 멘토 적합도 (20) = 직군(14) + 나이대(6)
     s_major = major_score(mentee["wanted_majors"], mentor_major)
     s_age = age_preference_score(mentee["wanted_mentor_ages"], mentor_age_band)
     s_fit = s_major + s_age
 
-    # 5) 텍스트 유사도 (10)
     sim = tfidf_similarity(mentee.get("note", ""), mentor_intro)
     s_text = round(sim * 10)
 
-    # 6) 스타일 (10) — 보완형 10, 동일 5, 기타 3
     s_style = style_score(mentee.get("style", ""), mentor_style)
 
     total = s_purpose_topics + s_comm + s_interests + s_fit + s_text + s_style
@@ -238,32 +221,23 @@ def compute_score(mentee: Dict, mentor_row: pd.Series) -> Dict:
 # -----------------------------
 # UI
 # -----------------------------
-st.set_page_config(page_title="결 — 멘티 추천 데모", page_icon="🤝", layout="centered")
+st.set_page_config(page_title="결 — 멘토 추천 데모", page_icon="🤝", layout="centered")
 
 st.title("결 — 멘토 추천 체험(멘티 전용)")
 st.caption("입력 데이터는 체험 종료 시 삭제됩니다. QR/다운로드 저장을 선택하지 않는 한 서버에 남지 않습니다.")
 
-# 멘토 데이터 로딩
-st.subheader("1) 멘토 데이터")
-col1, col2 = st.columns([2, 1])
-with col1:
-    up = st.file_uploader("더미 멘토 CSV 업로드 (없으면 기본 샘플 사용)", type=["csv"]) 
-with col2:
-    use_sample = st.toggle("기본 샘플 사용", value=True)
-
+# 멘토 데이터 로딩 (입력 UI 숨김)
 @st.cache_data(show_spinner=False)
 def load_default_csv() -> pd.DataFrame:
-    # 기본 경로 시도 (노트북/클라우드에서 캔버스 파일 경로 다를 수 있음)
     paths = [
-        "gyeol_dummy_mentors_20.csv",  # 현재 작업 디렉토리
-        "/mnt/data/gyeol_dummy_mentors_20.csv",  # ChatGPT 샌드박스 경로
+        "gyeol_dummy_mentors_20.csv",
+        "/mnt/data/gyeol_dummy_mentors_20.csv",
     ]
     for p in paths:
         try:
             return pd.read_csv(p)
         except Exception:
             continue
-    # 비상 샘플(최소 필드)
     return pd.DataFrame([
         {"name": "김샘", "gender": "남", "age_band": "40–49", "occupation_major": "교육",
          "occupation_minor": "고등학교 교사", "comm_modes": "대면 만남, 일반 채팅",
@@ -272,28 +246,39 @@ def load_default_csv() -> pd.DataFrame:
          "topic_prefs": "인생 경험·삶의 가치관, 건강·웰빙", "intro": "경청 중심의 상담을 합니다."}
     ])
 
-if up is not None and not use_sample:
-    mentors_df = pd.read_csv(up)
-else:
-    mentors_df = load_default_csv()
-
-# 필수 칼럼 보정
-for col in ["name","gender","age_band","occupation_major","comm_modes","comm_time","comm_days","style","interests","purpose","topic_prefs","intro"]:
-    if col not in mentors_df.columns:
-        mentors_df[col] = ""
-
-st.success(f"멘토 데이터 로드 완료: {len(mentors_df)}명")
-with st.expander("데이터 미리보기", expanded=False):
-    st.dataframe(mentors_df.head(10), use_container_width=True)
+mentors_df = load_default_csv()
+st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명")
 
 st.markdown("---")
-st.subheader("2) 멘티 설문")
+st.subheader("2) 연결될 준비")
 
 # ---- 설문 입력 ----
 with st.form("mentee_form"):
     name = st.text_input("이름", value="")
     gender = st.radio("성별", GENDERS, horizontal=True, index=0)
     age_band = st.selectbox("나이대", AGE_BANDS, index=0)
+
+    # 아바타 업로드 및 선택
+    st.markdown("### 내 아바타 선택")
+    avatar_files = st.file_uploader(
+        "아바타 이미지 업로드 (여러 장 가능)",
+        type=["png","jpg","jpeg","webp"],
+        accept_multiple_files=True,
+        help="업로드한 이미지 중 하나를 선택하면 결과 카드에 함께 표시됩니다."
+    )
+    selected_avatar_idx = None
+    if avatar_files:
+        cols_ava = st.columns(min(4, len(avatar_files)))
+        for i_ava, f_ava in enumerate(avatar_files):
+            with cols_ava[i_ava % len(cols_ava)]:
+                st.image(f_ava, caption=f_ava.name, use_container_width=True)
+        names_ava = [f.name for f in avatar_files]
+        selected_name = st.selectbox("사용할 아바타 선택", names_ava)
+        selected_avatar_idx = names_ava.index(selected_name)
+        st.session_state['selected_avatar_bytes'] = avatar_files[selected_avatar_idx].getvalue()
+        st.session_state['selected_avatar_name'] = selected_name
+    else:
+        st.info("아바타 이미지를 업로드하면 결과 카드에 함께 표시됩니다.")
 
     st.markdown("### 소통 선호")
     comm_modes = st.multiselect("선호하는 소통 방법(복수)", COMM_MODES, default=["일반 채팅"])
@@ -304,11 +289,16 @@ with st.form("mentee_form"):
         "소통 스타일 — 평소 대화 시 본인과 비슷한 유형",
         STYLES,
         help=(
-            "연두부형: 조용하고 차분, 경청·공감\n"
-            "분위기메이커형: 활발·주도\n"
-            "효율추구형: 목표·체계\n"
-            "댕댕이형: 자유롭고 즉흥\n"
-            "감성 충만형: 위로·지지 지향\n"
+            "연두부형: 조용하고 차분, 경청·공감
+"
+            "분위기메이커형: 활발·주도
+"
+            "효율추구형: 목표·체계
+"
+            "댕댕이형: 자유롭고 즉흥
+"
+            "감성 충만형: 위로·지지 지향
+"
             "냉철한 조언자형: 논리·문제 해결"
         ),
     )
@@ -338,7 +328,7 @@ if not submitted:
 
 # ---- 매칭 계산 ----
 mentee_payload = {
-    "name": name.strip(),
+    "name": (name or "").strip(),
     "gender": gender,
     "age_band": age_band,
     "comm_modes": set(comm_modes),
@@ -348,9 +338,9 @@ mentee_payload = {
     "interests": set(interests),
     "purpose": set(purpose),
     "topics": set(topics),
-    "wanted_majors": set(wanted_majors),
+    "wanted_majors": set(wanted_ajors) if False else set(wanted_majors),  # typing hint guard
     "wanted_mentor_ages": set(wanted_mentor_ages),
-    "note": note.strip(),
+    "note": (note or "").strip(),
 }
 
 scores = []
@@ -372,16 +362,24 @@ for i, item in enumerate(ranked, start=1):
     r = mentors_df.loc[item["idx"]]
     with st.container(border=True):
         st.markdown(f"### #{i}. {r.get('name','(이름없음)')} · {str(r.get('occupation_major','')).strip()} · {str(r.get('age_band','')).strip()}")
+        # 아바타 표시 (선택된 경우)
+        if 'selected_avatar_bytes' in st.session_state:
+            st.image(st.session_state['selected_avatar_bytes'], width=96)
         cols = st.columns(3)
         with cols[0]:
             st.write(f"**총점**: {item['total']}점")
             bd = item["breakdown"]
             st.write(
-                f"- 목적·주제: {bd['목적·주제']}\n"
-                f"- 소통 선호: {bd['소통 선호']}\n"
-                f"- 관심사/성향: {bd['관심사/성향']}\n"
-                f"- 멘토 적합도: {bd['멘토 적합도']}\n"
-                f"- 텍스트: {bd['텍스트']}\n"
+                f"- 목적·주제: {bd['목적·주제']}
+"
+                f"- 소통 선호: {bd['소통 선호']}
+"
+                f"- 관심사/성향: {bd['관심사/성향']}
+"
+                f"- 멘토 적합도: {bd['멘토 적합도']}
+"
+                f"- 텍스트: {bd['텍스트']}
+"
                 f"- 스타일: {bd['스타일']}"
             )
         with cols[1]:
