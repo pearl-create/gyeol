@@ -1,641 +1,419 @@
-# app.py
-# ------------------------------------------------------------
-# 노인 멘토 - 청년 멘티 매칭 플랫폼 (Streamlit 단일 통합 버전)
-# 안전 파서 + 기본값 정제 + CSV 정화 + NaN/비문자열 텍스트 방어 포함
-# ------------------------------------------------------------
-import os
-import json
-import hashlib
-from datetime import datetime
-from typing import List, Dict, Any
+# -*- coding: utf-8 -*-
+"""
+결(結) — 멘티 전용 박람회 체험용 매칭 데모 앱
+
+요구사항 요약
+- 로그인/회원가입 없음: 즉시 설문 → 추천 멘토 카드 노출
+- 더미 멘토 20명 CSV 사용 (사용자 업로드도 허용)
+- 소통 방법/시간대/요일, 관심사, 목적/주제, 희망 직군, 스타일(6종) 반영
+- 100점 만점 가중합 매칭 및 근거 분해 표시
+
+필요 패키지
+- streamlit, pandas, numpy, scikit-learn
+
+실행
+- streamlit run gyeol_mentee_demo_app.py
+"""
+
+import io
+import math
+from typing import List, Set, Dict
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 # -----------------------------
-# 전역 상수 & 선택지
+# 상수/어휘 정의
 # -----------------------------
-DATA_DIR = "data"
-USERS_CSV = os.path.join(DATA_DIR, "users.csv")
-MATCHES_CSV = os.path.join(DATA_DIR, "matches.csv")
-
-ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin123")
-
-ROLES = ["멘토", "멘티"]
-
-AREAS = [
-    "진로상담", "취업/이력서", "창업", "재무/돈관리", "인간관계", "건강/생활습관",
-    "학습법", "해외경험", "공무원/공기업", "연구/석박사", "예술/창작", "IT/개발"
+GENDERS = ["남", "여", "기타"]
+AGE_BANDS = [
+    "만 13세~19세", "만 20세~29세", "만 30세~39세", "만 40세~49세",
+    "만 50세~59세", "만 60세~69세", "만 70세~79세", "만 80세~89세", "만 90세 이상"
 ]
 
-COMM_PREF = ["채팅", "전화", "화상", "대면"]
-SLOTS = ["평일 저녁", "평일 낮", "주말 오전", "주말 오후/저녁", "유동적"]
+COMM_MODES = ["대면 만남", "화상채팅", "일반 채팅"]
+TIME_SLOTS = ["오전", "오후", "저녁", "밤"]
+DAYS = ["월", "화", "수", "목", "금", "토", "일"]
 
-TRAIT_QUESTIONS = [
-    ("구체적 조언을 선호합니다", "concrete"),
-    ("긴 호흡의 장기 목표를 선호합니다", "longterm"),
-    ("과제/숙제를 주고받고 싶습니다", "homework"),
-    ("격려/공감 중심을 선호합니다", "empathy"),
-    ("엄격한 피드백을 선호합니다", "strict"),
+# 스타일 6종
+STYLES = [
+    "연두부형", "분위기메이커형", "효율추구형", "댕댕이형", "감성 충만형", "냉철한 조언자형"
 ]
 
+# 직군(대분류) — 사용자 합의된 목록 그대로 사용
+OCCUPATION_MAJORS = [
+    "경영자", "행정관리", "의학/보건", "법률/행정", "교육", "연구개발/ IT",
+    "예술/디자인", "기술/기능", "서비스 전문", "일반 사무", "영업 원",
+    "판매", "서비스", "의료/보건 서비스", "생산/제조", "건설/시설",
+    "농림수산업", "운송/기계", "운송 관리", "청소 / 경비", "단순노무",
+    "학생", "전업주부", "구직자 / 최근 퇴사자 / 프리랜서(임시)", "기타"
+]
+
+# 관심사 카테고리 키(표시용 라벨 == 저장용 값)
+INTERESTS = {
+    "여가/취미": ["독서", "음악 감상", "영화/드라마 감상", "게임", "운동/스포츠 관람", "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래"],
+    "학문/지적 관심사": ["인문학", "사회과학", "자연과학", "수학/논리 퍼즐", "IT/테크놀로지", "환경/지속가능성"],
+    "라이프스타일": ["패션/뷰티", "건강/웰빙", "자기계발", "사회참여/봉사활동", "재테크/투자", "반려동물"],
+    "대중문화": ["K-POP", "아이돌/연예인", "유튜브/스트리밍", "웹툰/웹소설", "스포츠 스타"],
+    "성향": ["혼자 보내는 시간 선호", "친구들과 어울리기 선호", "실내 활동 선호", "야외 활동 선호", "새로움 추구", "안정감 추구"],
+}
+
+PURPOSES = ["진로 / 커리어 조언", "학업 / 전문지식 조언", "사회, 인생 경험 공유", "정서적 지지와 대화"]
+TOPIC_PREFS = ["진로·직업", "학업·전문 지식", "인생 경험·삶의 가치관", "대중문화·취미", "사회 문제·시사", "건강·웰빙"]
+
+# 스타일 상호 보완관계(가산점)
+COMPLEMENT_PAIRS = {
+    ("연두부형", "분위기메이커형"),
+    ("연두부형", "냉철한 조언자형"),
+    ("감성 충만형", "효율추구형"),
+    ("댕댕이형", "효율추구형"),
+    ("분위기메이커형", "냉철한 조언자형"),
+}
+
+# 직군 유사군(정확 일치가 아니어도 부분 가점)
+SIMILAR_MAJORS = {
+    ("의학/보건", "의료/보건 서비스"),
+    ("영업 원", "판매"),
+    ("서비스", "서비스 전문"),
+    ("기술/기능", "건설/시설"),
+    ("운송/기계", "운송 관리"),
+    ("행정관리", "일반 사무"),
+}
+
 # -----------------------------
-# 유틸
+# 유틸 함수
 # -----------------------------
-def ensure_dirs():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(USERS_CSV):
-        pd.DataFrame(columns=[
-            "user_id","role","name","email","pass_hash","age","gender","region",
-            "areas","topics","style","comm_pref","slots","experience_years",
-            "intro","goals","created_at","updated_at"
-        ]).to_csv(USERS_CSV, index=False, encoding="utf-8")
-    if not os.path.exists(MATCHES_CSV):
-        pd.DataFrame(columns=["match_id","src_user","tgt_user","score","created_at"]).to_csv(
-            MATCHES_CSV, index=False, encoding="utf-8"
-        )
 
-def hash_pw(pw: str) -> str:
-    return hashlib.sha256(pw.encode("utf-8")).hexdigest()
-
-def now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-def safe_str(x: Any) -> str:
-    """NaN/None/비문자열을 안전하게 '' 또는 문자열로 변환"""
-    if x is None:
-        return ""
-    if isinstance(x, float) and np.isnan(x):
-        return ""
-    try:
-        s = str(x)
-    except Exception:
-        return ""
-    return s
-
-def _parse_json_list_or_dict_cell(x):
-    """리스트/딕트 JSON 문자열만 안전하게 파싱. 그 외는 [] 반환."""
-    if isinstance(x, str):
-        s = x.strip()
-        if (s.startswith("[") and s.endswith("]")) or (s.startswith("{") and s.endswith("}")):
-            try:
-                return json.loads(s)
-            except:
-                return []
-        if s == "":
-            return []
-    if isinstance(x, (list, dict)):
-        return x
-    return []
-
-def load_users() -> pd.DataFrame:
-    ensure_dirs()
-    try:
-        df = pd.read_csv(USERS_CSV, encoding="utf-8")
-    except:
-        df = pd.read_csv(USERS_CSV)
-
-    for col in ["areas", "topics", "style", "comm_pref", "slots"]:
-        if col in df.columns:
-            df[col] = df[col].apply(_parse_json_list_or_dict_cell)
-
-    # 텍스트 컬럼은 NaN → "" 로 보정
-    for col in ["intro", "goals", "age", "gender", "region", "name", "email"]:
-        if col in df.columns:
-            df[col] = df[col].apply(safe_str)
-
-    return df
-
-def save_users(df: pd.DataFrame):
-    df2 = df.copy()
-    for col in ["areas","topics","style","comm_pref","slots"]:
-        df2[col] = df2[col].apply(
-            lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, (list, dict))
-            else ("[]" if (x is None or (isinstance(x, float) and np.isnan(x))) else json.dumps([x], ensure_ascii=False))
-        )
-    # 텍스트 컬럼은 문자열 보장
-    for col in ["intro", "goals", "age", "gender", "region", "name", "email"]:
-        if col in df2.columns:
-            df2[col] = df2[col].apply(safe_str)
-    df2.to_csv(USERS_CSV, index=False, encoding="utf-8")
-
-def load_matches() -> pd.DataFrame:
-    ensure_dirs()
-    try:
-        return pd.read_csv(MATCHES_CSV, encoding="utf-8")
-    except:
-        return pd.read_csv(MATCHES_CSV)
-
-def save_matches(df: pd.DataFrame):
-    df.to_csv(MATCHES_CSV, index=False, encoding="utf-8")
-
-def new_user_id(df: pd.DataFrame) -> int:
-    if len(df)==0: return 1
-    return int(df["user_id"].max()) + 1
-
-def new_match_id(df: pd.DataFrame) -> int:
-    if len(df)==0: return 1
-    return int(df["match_id"].max()) + 1
-
-def deserialize_list(x):
-    if isinstance(x, list): return x
-    if isinstance(x, str):
-        try:
-            return json.loads(x)
-        except:
-            return [s.strip() for s in x.split(",") if s.strip()]
-    return []
-
-def serialize_traits(d: Dict[str,int]) -> str:
-    return json.dumps(d, ensure_ascii=False)
-
-def deserialize_traits(s: Any) -> Dict[str,int]:
-    try:
-        d = json.loads(s) if isinstance(s, str) else (s if isinstance(s, dict) else {})
-        return {k:int(v) for k,v in d.items()}
-    except:
-        return {}
-
-def jaccard(a: List[str], b: List[str]) -> float:
-    sa, sb = set(a), set(b)
-    if len(sa)==0 and len(sb)==0: return 0.0
-    inter = len(sa & sb); union = len(sa | sb)
-    return inter/union if union>0 else 0.0
-
-def overlap_score(a: List[str], b: List[str]) -> float:
-    sa, sb = set(a), set(b)
-    if len(sa)==0 or len(sb)==0: return 0.0
-    return len(sa & sb) / min(len(sa), len(sb))
-
-def likert_distance(a: Dict[str,int], b: Dict[str,int]) -> float:
-    if not a or not b: return 0.0
-    keys = set(a.keys()) & set(b.keys())
-    if not keys: return 0.0
-    sims = [(5 - abs(a.get(k,3)-b.get(k,3)))/5 for k in keys]
-    return float(np.mean(sims)) if sims else 0.0
-
-def text_overlap(a: Any, b: Any) -> float:
-    """TF-IDF 코사인 유사도 (한글/영문 혼용 안전). 비문자열/NaN 안전 처리."""
-    a_str = safe_str(a).strip()
-    b_str = safe_str(b).strip()
-    if a_str == "" and b_str == "":
+def ratio_overlap(a: Set[str], b: Set[str]) -> float:
+    if not a or not b:
         return 0.0
-    vec = TfidfVectorizer(min_df=1, ngram_range=(1,2), token_pattern=r"(?u)\b\w+\b")
-    X = vec.fit_transform([a_str, b_str])
-    num = (X[0].multiply(X[1])).sum()
-    den = (np.linalg.norm(X[0].toarray()) * np.linalg.norm(X[1].toarray()) + 1e-9)
-    return float(num/den)
+    return len(a & b) / len(a | b)
 
-def parse_trait_answers(prefix: str) -> Dict[str,int]:
-    out = {}
-    for _, key in TRAIT_QUESTIONS:
-        out[key] = int(st.session_state.get(f"{prefix}_{key}", 3))
-    return out
 
-def _safe_default(options, raw_list):
-    """multiselect의 default 값이 항상 옵션 집합에 포함되도록 정제"""
-    if not isinstance(raw_list, list):
-        return []
-    cleaned = [safe_str(v) for v in raw_list if isinstance(v, (str, int, float))]
-    return [v for v in cleaned if v in options]
+def list_to_set(cell: str) -> Set[str]:
+    if pd.isna(cell) or not str(cell).strip():
+        return set()
+    return {x.strip() for x in str(cell).replace(";", ",").split(",") if x.strip()}
+
+
+def style_score(mentee_style: str, mentor_style: str) -> int:
+    if mentee_style and mentor_style:
+        if mentee_style == mentor_style:
+            return 5  # 동일형 가점
+        # 보완형 체크(순서 무관)
+        pair = (mentee_style, mentor_style)
+        rev_pair = (mentor_style, mentee_style)
+        if pair in COMPLEMENT_PAIRS or rev_pair in COMPLEMENT_PAIRS:
+            return 10
+        return 3  # 기타 조합 소폭 가점
+    return 0
+
+
+def major_score(wanted_majors: Set[str], mentor_major: str) -> int:
+    if not mentor_major:
+        return 0
+    if mentor_major in wanted_majors:
+        return 12
+    # 유사군 확인
+    for a, b in SIMILAR_MAJORS:
+        if (a in wanted_majors and mentor_major == b) or (b in wanted_majors and mentor_major == a):
+            return 6
+    return 0
+
+
+def age_band_normalize(label: str) -> str:
+    # 멘토 CSV는 다양 표기 가능 → 핵심 패턴만 보정
+    s = str(label).strip()
+    if s.startswith("20") or "20" in s:
+        return "만 20세~29세"
+    if s.startswith("30") or "30" in s:
+        return "만 30세~39세"
+    if s.startswith("40") or "40" in s:
+        return "만 40세~49세"
+    if s.startswith("50") or "50" in s:
+        return "만 50세~59세"
+    if s.startswith("60") or "60" in s:
+        return "만 60세~69세"
+    if s.startswith("70") or "70" in s:
+        return "만 70세~79세"
+    if s.startswith("80") or "80" in s:
+        return "만 80세~89세"
+    if "90" in s:
+        return "만 90세 이상"
+    if "13" in s or "19" in s:
+        return "만 13세~19세"
+    return s  # 그대로 반환
+
+
+def age_preference_score(preferred: Set[str], mentor_age_band: str) -> int:
+    if not preferred or not mentor_age_band:
+        return 0
+    mentor_age = age_band_normalize(mentor_age_band)
+    if mentor_age in preferred:
+        return 6  # 선호 범위 일치
+    # 인접 나이대: 근사치 2점
+    # 간단 근사: 문자열 인덱스 기반
+    idx_map = {k: i for i, k in enumerate(AGE_BANDS)}
+    if mentor_age in idx_map:
+        m_idx = idx_map[mentor_age]
+        if any(abs(m_idx - idx_map[p]) == 1 for p in preferred if p in idx_map):
+            return 2
+    return 0
+
+
+def tfidf_similarity(text_a: str, text_b: str) -> float:
+    a = (text_a or "").strip()
+    b = (text_b or "").strip()
+    if not a or not b:
+        return 0.0
+    vec = TfidfVectorizer(max_features=500, ngram_range=(1, 2))
+    X = vec.fit_transform([a, b])
+    return float(cosine_similarity(X[0], X[1])[0, 0])
+
 
 # -----------------------------
-# 매칭 점수
+# 점수 계산
 # -----------------------------
-def compute_match_score(mentee: Dict[str,Any], mentor: Dict[str,Any]) -> float:
-    s_area = jaccard(mentee.get("areas",[]), mentor.get("areas",[]))
-    s_topic = overlap_score(mentee.get("topics",[]), mentor.get("topics",[]))
-    s_comm = jaccard(mentee.get("comm_pref",[]), mentor.get("comm_pref",[]))
-    s_slot = jaccard(mentee.get("slots",[]), mentor.get("slots",[]))
 
-    s_region = 0.1 if (mentee.get("region","")==mentor.get("region","") and mentee.get("region","")!="") else 0.0
+def compute_score(mentee: Dict, mentor_row: pd.Series) -> Dict:
+    """멘티 입력과 멘토 1명의 필드로 점수 계산 + 근거 분해 반환"""
+    # 멘토 필드 파싱
+    mentor_comm_modes = list_to_set(mentor_row.get("comm_modes", ""))
+    mentor_comm_times = list_to_set(mentor_row.get("comm_time", ""))
+    mentor_comm_days = list_to_set(mentor_row.get("comm_days", ""))
+    mentor_interests = list_to_set(mentor_row.get("interests", ""))
+    mentor_purposes = list_to_set(mentor_row.get("purpose", ""))
+    mentor_topics = list_to_set(mentor_row.get("topic_prefs", ""))
+    mentor_style = str(mentor_row.get("style", "")).strip()
+    mentor_major = str(mentor_row.get("occupation_major", "")).strip()
+    mentor_intro = str(mentor_row.get("intro", "")).strip()
+    mentor_age_band = str(mentor_row.get("age_band", "")).strip()
 
-    s_trait = likert_distance(
-        deserialize_traits(mentee.get("style","{}")),
-        deserialize_traits(mentor.get("style","{}"))
-    )
+    # 1) 목적·주제 (30)
+    purpose_ratio = ratio_overlap(mentee["purpose"], mentor_purposes)
+    topics_ratio = ratio_overlap(mentee["topics"], mentor_topics)
+    s_purpose_topics = round(purpose_ratio * 18 + topics_ratio * 12)
 
-    s_text = max(
-        text_overlap(mentee.get("goals",""), mentor.get("intro","")),
-        text_overlap(mentee.get("goals",""), mentor.get("goals",""))
-    )
+    # 2) 소통 선호 (20) = 방식(8) + 시간(6) + 요일(6)
+    modes_ratio = ratio_overlap(mentee["comm_modes"], mentor_comm_modes)
+    times_ratio = ratio_overlap(mentee["time_slots"], mentor_comm_times)
+    days_ratio = ratio_overlap(mentee["days"], mentor_comm_days)
+    s_comm = round(modes_ratio * 8 + times_ratio * 6 + days_ratio * 6)
 
-    exp = mentor.get("experience_years", 0)
-    try:
-        exp = int(exp)
-    except:
-        exp = 0
-    s_exp = min(float(exp)/10.0, 1.0)*0.1
+    # 3) 관심사·성향 (20) — 단순 교집합 비율로 근사
+    interest_ratio = ratio_overlap(mentee["interests"], mentor_interests)
+    s_interests = round(interest_ratio * 20)
 
-    score = (
-        0.25*s_area + 0.15*s_topic + 0.15*s_trait +
-        0.10*s_comm + 0.10*s_slot + 0.10*s_text +
-        s_region + s_exp
-    )
-    return round(float(score), 4)
+    # 4) 멘토 적합도 (20) = 직군(14) + 나이대(6)
+    s_major = major_score(mentee["wanted_majors"], mentor_major)
+    s_age = age_preference_score(mentee["wanted_mentor_ages"], mentor_age_band)
+    s_fit = s_major + s_age
+
+    # 5) 텍스트 유사도 (10)
+    sim = tfidf_similarity(mentee.get("note", ""), mentor_intro)
+    s_text = round(sim * 10)
+
+    # 6) 스타일 (10) — 보완형 10, 동일 5, 기타 3
+    s_style = style_score(mentee.get("style", ""), mentor_style)
+
+    total = s_purpose_topics + s_comm + s_interests + s_fit + s_text + s_style
+    total = int(max(0, min(100, total)))
+
+    return {
+        "total": total,
+        "breakdown": {
+            "목적·주제": s_purpose_topics,
+            "소통 선호": s_comm,
+            "관심사/성향": s_interests,
+            "멘토 적합도": s_fit,
+            "텍스트": s_text,
+            "스타일": s_style,
+        }
+    }
+
 
 # -----------------------------
 # UI
 # -----------------------------
-def header():
-    st.markdown("## 👵🧓 노인 멘토 – 👩‍🎓👨‍🎓 청년 멘티 매칭 플랫폼")
-    st.caption("가입 설문을 바탕으로 맞춤형 멘토-멘티를 추천합니다.")
+st.set_page_config(page_title="결 — 멘티 추천 데모", page_icon="🤝", layout="centered")
 
-def sidebar():
-    st.sidebar.header("메뉴")
-    page = st.sidebar.radio("이동", ["홈", "회원가입/로그인", "프로필 설문", "매칭 찾기", "내 매칭", "관리자 대시보드"])
-    st.sidebar.divider()
-    st.sidebar.caption("※ 데모용: 로컬 CSV에 저장됩니다.")
-    return page
+st.title("결 — 멘토 추천 체험(멘티 전용)")
+st.caption("입력 데이터는 체험 종료 시 삭제됩니다. QR/다운로드 저장을 선택하지 않는 한 서버에 남지 않습니다.")
 
-def login_box():
-    st.subheader("로그인")
-    email = st.text_input("이메일", key="login_email")
-    pw = st.text_input("비밀번호", type="password", key="login_pw")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("로그인"):
-            df = load_users()
-            if email and pw:
-                ph = hash_pw(pw)
-                row = df[(df["email"]==email) & (df["pass_hash"]==ph)]
-                if len(row)==1:
-                    st.session_state["user_id"] = int(row.iloc[0]["user_id"])
-                    st.session_state["role"] = row.iloc[0]["role"]
-                    st.success("로그인 성공!")
-                else:
-                    st.error("이메일/비밀번호가 올바르지 않습니다.")
-            else:
-                st.warning("이메일과 비밀번호를 입력하세요.")
-    with col2:
-        if st.button("로그아웃"):
-            st.session_state.pop("user_id", None)
-            st.session_state.pop("role", None)
-            st.info("로그아웃 되었습니다.")
+# 멘토 데이터 로딩
+st.subheader("1) 멘토 데이터")
+col1, col2 = st.columns([2, 1])
+with col1:
+    up = st.file_uploader("더미 멘토 CSV 업로드 (없으면 기본 샘플 사용)", type=["csv"]) 
+with col2:
+    use_sample = st.toggle("기본 샘플 사용", value=True)
 
-def signup_box():
-    st.subheader("회원가입")
-    role = st.selectbox("역할 선택", ROLES, index=1)
-    name = st.text_input("이름")
-    email = st.text_input("이메일(로그인 ID)")
-    pw = st.text_input("비밀번호", type="password")
-    pw2 = st.text_input("비밀번호 확인", type="password")
-    if st.button("회원가입 완료"):
-        if not (name and email and pw and pw2):
-            st.warning("모든 항목을 입력하세요.")
-            return
-        if pw != pw2:
-            st.error("비밀번호 확인이 일치하지 않습니다.")
-            return
-        df = load_users()
-        if (df["email"]==email).any():
-            st.error("이미 존재하는 이메일입니다.")
-            return
-        uid = new_user_id(df)
-        new_row = {
-            "user_id": uid, "role": role, "name": name, "email": email,
-            "pass_hash": hash_pw(pw), "age": "", "gender": "", "region": "",
-            "areas": json.dumps([], ensure_ascii=False),
-            "topics": json.dumps([], ensure_ascii=False),
-            "style": json.dumps({}, ensure_ascii=False),
-            "comm_pref": json.dumps([], ensure_ascii=False),
-            "slots": json.dumps([], ensure_ascii=False),
-            "experience_years": 0, "intro": "", "goals": "",
-            "created_at": now_str(), "updated_at": now_str(),
-        }
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-        save_users(df)
-        st.success("가입 완료! 이제 로그인하세요.")
-
-def trait_block(prefix: str, title: str):
-    st.markdown(f"#### {title}")
-    for label, key in TRAIT_QUESTIONS:
-        st.slider(f"{label}", 1, 5, 3, key=f"{prefix}_{key}")
-
-def profile_form():
-    if "user_id" not in st.session_state:
-        st.info("프로필 설문을 작성하려면 먼저 로그인하세요.")
-        return
-    df = load_users()
-    user = df[df["user_id"]==st.session_state["user_id"]].iloc[0]
-    st.subheader("프로필 설문")
-
-    # 기본정보
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        age = st.text_input("나이(선택)", value=safe_str(user.get("age","")))
-    with c2:
-        gender = st.text_input("성별(선택)", value=safe_str(user.get("gender","")))
-    with c3:
-        region = st.text_input("지역(예: 서울, 고양, 부산 등)", value=safe_str(user.get("region","")))
-
-    # multiselect 기본값 안전 정제
-    user_areas  = user.get("areas", [])
-    user_comm   = user.get("comm_pref", [])
-    user_slots  = user.get("slots", [])
-    user_topics = user.get("topics", [])
-
-    areas = st.multiselect("관심/전문 분야 선택", AREAS, default=_safe_default(AREAS, user_areas))
-    topics_txt = st.text_area(
-        "관심 주제 키워드 (쉼표로 구분)",
-        value=",".join([safe_str(t) for t in (user_topics if isinstance(user_topics, list) else []) if safe_str(t)!=""])
-    )
-    comms = st.multiselect("소통 선호", COMM_PREF, default=_safe_default(COMM_PREF, user_comm))
-    slots = st.multiselect("가능 요일/시간", SLOTS, default=_safe_default(SLOTS, user_slots))
-
-    # 성향/스타일
-    trait_block(prefix="trait", title="멘토링 성향/스타일")
-
-    intro = st.text_area("자기소개 (멘토는 경력/강점 포함 권장)", value=safe_str(user.get("intro","")))
-    goals = st.text_area("목표/요청사항 (무엇을 얻고 싶은가?)", value=safe_str(user.get("goals","")))
-
-    exp_years = 0
-    if user["role"] == "멘토":
-        raw_exp = user.get("experience_years", 0)
+@st.cache_data(show_spinner=False)
+def load_default_csv() -> pd.DataFrame:
+    # 기본 경로 시도 (노트북/클라우드에서 캔버스 파일 경로 다를 수 있음)
+    paths = [
+        "gyeol_dummy_mentors_20.csv",  # 현재 작업 디렉토리
+        "/mnt/data/gyeol_dummy_mentors_20.csv",  # ChatGPT 샌드박스 경로
+    ]
+    for p in paths:
         try:
-            exp_init = int(raw_exp) if not (isinstance(raw_exp, float) and np.isnan(raw_exp)) else 0
-        except:
-            exp_init = 0
-        exp_years = st.number_input("멘토링 관련/직무 경력 (년)", 0, 50, exp_init)
+            return pd.read_csv(p)
+        except Exception:
+            continue
+    # 비상 샘플(최소 필드)
+    return pd.DataFrame([
+        {"name": "김샘", "gender": "남", "age_band": "40–49", "occupation_major": "교육",
+         "occupation_minor": "고등학교 교사", "comm_modes": "대면 만남, 일반 채팅",
+         "comm_time": "오전, 오후", "comm_days": "월, 수, 금", "style": "연두부형",
+         "interests": "독서, 인문학, 건강/웰빙", "purpose": "사회, 인생 경험 공유, 정서적 지지와 대화",
+         "topic_prefs": "인생 경험·삶의 가치관, 건강·웰빙", "intro": "경청 중심의 상담을 합니다."}
+    ])
 
-    if st.button("저장"):
-        idx = df[df["user_id"]==st.session_state["user_id"]].index[0]
-        df.at[idx, "age"] = safe_str(age)
-        df.at[idx, "gender"] = safe_str(gender)
-        df.at[idx, "region"] = safe_str(region)
-        df.at[idx, "areas"] = json.dumps(areas, ensure_ascii=False)
-        df.at[idx, "topics"] = json.dumps([safe_str(t).strip() for t in topics_txt.split(",") if safe_str(t).strip()!=""], ensure_ascii=False)
-        df.at[idx, "comm_pref"] = json.dumps(comms, ensure_ascii=False)
-        df.at[idx, "slots"] = json.dumps(slots, ensure_ascii=False)
-        df.at[idx, "style"] = serialize_traits(parse_trait_answers("trait"))
-        df.at[idx, "intro"] = safe_str(intro)
-        df.at[idx, "goals"] = safe_str(goals)
-        if user["role"] == "멘토":
-            df.at[idx, "experience_years"] = int(exp_years)
-        df.at[idx, "updated_at"] = now_str()
-        save_users(df)
-        st.success("프로필이 저장되었습니다.")
+if up is not None and not use_sample:
+    mentors_df = pd.read_csv(up)
+else:
+    mentors_df = load_default_csv()
 
-def row_to_userdict(row: pd.Series) -> Dict[str,Any]:
-    return {
-        "user_id": int(row["user_id"]),
-        "role": row["role"],
-        "name": safe_str(row.get("name","")),
-        "email": safe_str(row.get("email","")),
-        "age": safe_str(row.get("age","")),
-        "gender": safe_str(row.get("gender","")),
-        "region": safe_str(row.get("region","")),
-        "areas": deserialize_list(row.get("areas","[]")),
-        "topics": deserialize_list(row.get("topics","[]")),
-        "style": deserialize_traits(row.get("style","{}")),
-        "comm_pref": deserialize_list(row.get("comm_pref","[]")),
-        "slots": deserialize_list(row.get("slots","[]")),
-        "experience_years": int(row.get("experience_years",0) if not pd.isna(row.get("experience_years",0)) else 0),
-        "intro": safe_str(row.get("intro","")),
-        "goals": safe_str(row.get("goals","")),
-    }
+# 필수 칼럼 보정
+for col in ["name","gender","age_band","occupation_major","comm_modes","comm_time","comm_days","style","interests","purpose","topic_prefs","intro"]:
+    if col not in mentors_df.columns:
+        mentors_df[col] = ""
 
-def user_card(row: pd.Series, score: float=None):
-    role_emoji = "🧓" if row["role"]=="멘토" else "🧑‍🎓"
-    st.markdown(f"**{role_emoji} {safe_str(row['name'])}**  |  {row['role']}  |  {safe_str(row.get('region',''))}")
-    st.caption(f"분야: {', '.join(deserialize_list(row.get('areas','[]')))}")
-    st.write(safe_str(row.get("intro","")))
-    if row["role"]=="멘토":
-        st.caption(f"경력(년): {int(row.get('experience_years',0))}")
-    if score is not None:
-        st.success(f"매칭 점수: {score:.3f}")
-    with st.expander("연락처/상세 보기"):
-        st.write(f"이메일: {safe_str(row['email'])}")
-        st.markdown(f"*소통 선호*: {', '.join(deserialize_list(row.get('comm_pref','[]')))}")
-        st.markdown(f"*가능 시간*: {', '.join(deserialize_list(row.get('slots','[]')))}")
-        st.markdown(f"*관심 주제*: {', '.join(deserialize_list(row.get('topics','[]')))}")
-        st.markdown(f"*목표*: {safe_str(row.get('goals',''))}")
-    st.divider()
+st.success(f"멘토 데이터 로드 완료: {len(mentors_df)}명")
+with st.expander("데이터 미리보기", expanded=False):
+    st.dataframe(mentors_df.head(10), use_container_width=True)
 
-def find_matches():
-    if "user_id" not in st.session_state:
-        st.info("먼저 로그인하세요.")
-        return
+st.markdown("---")
+st.subheader("2) 멘티 설문")
 
-    df = load_users()
-    me = df[df["user_id"]==st.session_state["user_id"]]
-    if len(me)!=1:
-        st.error("사용자 정보를 찾을 수 없습니다.")
-        return
-    me = me.iloc[0]
+# ---- 설문 입력 ----
+with st.form("mentee_form"):
+    name = st.text_input("이름", value="")
+    gender = st.radio("성별", GENDERS, horizontal=True, index=0)
+    age_band = st.selectbox("나이대", AGE_BANDS, index=0)
 
-    st.subheader("맞춤형 매칭")
-    topk = st.slider("추천 인원 수", 1, 20, 5)
-    filter_region = st.checkbox("같은 지역 우선 보기", value=False)
-    filter_area = st.multiselect("특정 분야 필터 (선택)", AREAS, default=[])
+    st.markdown("### 소통 선호")
+    comm_modes = st.multiselect("선호하는 소통 방법(복수)", COMM_MODES, default=["일반 채팅"])
+    time_slots = st.multiselect("소통 가능한 시간대(복수)", TIME_SLOTS, default=["오후", "저녁"])
+    days = st.multiselect("소통 가능한 요일(복수)", DAYS, default=["화", "목"])
 
-    pool = df[df["role"]==("멘토" if me["role"]=="멘티" else "멘티")].copy()
-    if filter_region and safe_str(me.get("region","")):
-        pool = pool[pool["region"]==safe_str(me.get("region",""))]
-    if filter_area:
-        pool = pool[pool["areas"].apply(lambda x: any(a in deserialize_list(x) for a in filter_area))]
-
-    if len(pool)==0:
-        st.warning("조건에 맞는 대상이 없습니다. 필터를 완화해보세요.")
-        return
-
-    me_dict = row_to_userdict(me)
-    scores = []
-    for _, r in pool.iterrows():
-        other = row_to_userdict(r)
-        s = compute_match_score(me_dict, other) if me["role"]=="멘티" else compute_match_score(other, me_dict)
-        scores.append(s)
-    pool = pool.copy()
-    pool["score"] = scores
-    pool = pool.sort_values(by="score", ascending=False)
-
-    for _, r in pool.head(topk).iterrows():
-        user_card(r, score=r["score"])
-
-    if st.button("위 추천 결과를 '내 매칭'에 저장"):
-        mdf = load_matches()
-        created = []
-        for _, r in pool.head(topk).iterrows():
-            match_row = {
-                "match_id": new_match_id(mdf),
-                "src_user": int(me["user_id"]),
-                "tgt_user": int(r["user_id"]),
-                "score": float(r["score"]),
-                "created_at": now_str()
-            }
-            mdf = pd.concat([mdf, pd.DataFrame([match_row])], ignore_index=True)
-            created.append(match_row["match_id"])
-        save_matches(mdf)
-        st.success(f"저장 완료! (매칭 ID: {created})")
-
-def my_matches():
-    if "user_id" not in st.session_state:
-        st.info("먼저 로그인하세요.")
-        return
-    st.subheader("내 매칭")
-    mdf = load_matches()
-    df = load_users()
-    mine = mdf[mdf["src_user"]==st.session_state["user_id"]].sort_values(by="score", ascending=False)
-    if len(mine)==0:
-        st.caption("아직 저장된 매칭이 없습니다. '매칭 찾기'에서 저장해보세요.")
-        return
-    for _, m in mine.iterrows():
-        other = df[df["user_id"]==int(m["tgt_user"])]
-        if len(other)==1:
-            r = other.iloc[0]
-            user_card(r, score=float(m["score"]))
-
-def sanitize_users_csv():
-    """옵션 외 값 제거 & 토픽 문자열 정리 후 저장"""
-    df = load_users()
-    df["areas"] = df["areas"].apply(lambda xs: [x for x in xs if x in AREAS] if isinstance(xs, list) else [])
-    df["comm_pref"] = df["comm_pref"].apply(lambda xs: [x for x in xs if x in COMM_PREF] if isinstance(xs, list) else [])
-    df["slots"] = df["slots"].apply(lambda xs: [x for x in xs if x in SLOTS] if isinstance(xs, list) else [])
-    df["topics"] = df["topics"].apply(
-        lambda xs: [safe_str(x).strip() for x in xs if isinstance(x, (str,int,float)) and safe_str(x).strip()!=""] if isinstance(xs, list) else []
+    style = st.selectbox(
+        "소통 스타일 — 평소 대화 시 본인과 비슷한 유형",
+        STYLES,
+        help=(
+            "연두부형: 조용하고 차분, 경청·공감\n"
+            "분위기메이커형: 활발·주도\n"
+            "효율추구형: 목표·체계\n"
+            "댕댕이형: 자유롭고 즉흥\n"
+            "감성 충만형: 위로·지지 지향\n"
+            "냉철한 조언자형: 논리·문제 해결"
+        ),
     )
-    # 텍스트 컬럼 보정
-    for col in ["intro","goals","age","gender","region","name","email"]:
-        if col in df.columns:
-            df[col] = df[col].apply(safe_str)
-    save_users(df)
 
-def admin_dashboard():
-    st.subheader("관리자 대시보드")
-    pwd = st.text_input("관리자 비밀번호", type="password")
-    if not st.button("접속") and "admin_ok" not in st.session_state:
-        st.info("관리자 비밀번호를 입력하고 접속을 눌러주세요.")
-        return
-    if "admin_ok" not in st.session_state:
-        if pwd == ADMIN_PASS:
-            st.session_state["admin_ok"] = True
-            st.success("관리자 접속 성공")
-        else:
-            st.error("비밀번호가 올바르지 않습니다.")
-            return
-
-    tab1, tab2, tab3 = st.tabs(["전체 사용자", "매칭 기록", "도구"])
-    with tab1:
-        df = load_users()
-        st.dataframe(df, use_container_width=True)
-        st.download_button(
-            label="사용자 CSV 다운로드",
-            data=df.to_csv(index=False).encode("utf-8"),
-            file_name=f"users_export_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv"
+    st.markdown("### 관심사·취향")
+    interests = []
+    for grp, items in INTERESTS.items():
+        interests.extend(
+            st.multiselect(f"{grp}", items, default=[])
         )
-    with tab2:
-        mdf = load_matches()
-        st.dataframe(mdf, use_container_width=True)
-        st.download_button(
-            label="매칭 CSV 다운로드",
-            data=mdf.to_csv(index=False).encode("utf-8"),
-            file_name=f"matches_export_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv"
-        )
-    with tab3:
-        colA, colB, colC = st.columns(3)
-        with colA:
-            if st.button("샘플 멘토/멘티 6명 생성"):
-                seed_sample_data()
-                st.success("샘플 데이터가 생성되었습니다.")
-        with colB:
-            if st.button("CSV 정화(옵션 외 값 제거)"):
-                sanitize_users_csv()
-                st.success("CSV 정화 완료")
-        with colC:
-            if st.button("모든 데이터 초기화"):
-                if os.path.exists(USERS_CSV): os.remove(USERS_CSV)
-                if os.path.exists(MATCHES_CSV): os.remove(MATCHES_CSV)
-                ensure_dirs()
-                st.warning("초기화 완료. 페이지를 새로고침하세요.")
 
-def seed_sample_data():
-    df = load_users()
-    base_id = new_user_id(df)
-    mentors = [
-        dict(role="멘토", name="김어르신", email="m1@example.com", pass_hash=hash_pw("1111"),
-             region="서울", areas=["취업/이력서","재무/돈관리"], topics=["이직","포트폴리오"], comm_pref=["화상","채팅"],
-             slots=["평일 저녁","주말 오후/저녁"], style={"concrete":5,"longterm":4,"homework":4,"empathy":3,"strict":3},
-             experience_years=20, intro="인사팀 경력 20년, 이력서/면접 멘토링 전문", goals="젊은 세대와 지혜 나눔"),
-        dict(role="멘토", name="박선배", email="m2@example.com", pass_hash=hash_pw("1111"),
-             region="고양", areas=["학습법","연구/석박사"], topics=["유학","논문"], comm_pref=["화상","대면"],
-             slots=["주말 오전","유동적"], style={"concrete":3,"longterm":5,"homework":4,"empathy":4,"strict":2},
-             experience_years=12, intro="대학원 진학/연구계 커리어 상담", goals="후배 양성"),
-        dict(role="멘토", name="이장로", email="m3@example.com", pass_hash=hash_pw("1111"),
-             region="부산", areas=["창업","재무/돈관리","IT/개발"], topics=["스타트업","앱개발"], comm_pref=["채팅","전화"],
-             slots=["평일 낮","유동적"], style={"concrete":4,"longterm":4,"homework":3,"empathy":3,"strict":2},
-             experience_years=15, intro="핀테크 창업 2회, 실패/성공 스토리 공유", goals="창업가 멘토링"),
-    ]
-    mentees = [
-        dict(role="멘티", name="홍청년", email="y1@example.com", pass_hash=hash_pw("2222"),
-             region="서울", areas=["취업/이력서","IT/개발"], topics=["포트폴리오","코딩테스트"], comm_pref=["화상","채팅"],
-             slots=["평일 저녁","주말 오후/저녁"], style={"concrete":4,"longterm":3,"homework":4,"empathy":3,"strict":3},
-             intro="개발 취업 준비생", goals="이력서/포트폴리오 피드백"),
-        dict(role="멘티", name="최대학생", email="y2@example.com", pass_hash=hash_pw("2222"),
-             region="고양", areas=["학습법","연구/석박사"], topics=["대학원","논문"], comm_pref=["화상","대면"],
-             slots=["주말 오전","유동적"], style={"concrete":3,"longterm":5,"homework":4,"empathy":4,"strict":2},
-             intro="연구자로 성장하고 싶어요", goals="석사 진학 로드맵"),
-        dict(role="멘티", name="장창업", email="y3@example.com", pass_hash=hash_pw("2222"),
-             region="부산", areas=["창업","재무/돈관리","IT/개발"], topics=["스타트업","앱개발"], comm_pref=["채팅","전화"],
-             slots=["평일 낮","유동적"], style={"concrete":4,"longterm":4,"homework":3,"empathy":3,"strict":2},
-             intro="스타트업 준비", goals="MVP 피드백과 자금 계획"),
-    ]
-    rows = []
-    t = now_str()
-    for i, u in enumerate(mentors + mentees):
-        rows.append({
-            "user_id": base_id+i, "role": u["role"], "name": u["name"], "email": u["email"],
-            "pass_hash": u["pass_hash"], "age": "", "gender": "", "region": u["region"],
-            "areas": json.dumps(u["areas"], ensure_ascii=False),
-            "topics": json.dumps(u["topics"], ensure_ascii=False),
-            "style": json.dumps(u["style"], ensure_ascii=False),
-            "comm_pref": json.dumps(u["comm_pref"], ensure_ascii=False),
-            "slots": json.dumps(u["slots"], ensure_ascii=False),
-            "experience_years": u["experience_years"] if u["role"]=="멘토" else 0,
-            "intro": u["intro"], "goals": u["goals"],
-            "created_at": t, "updated_at": t,
-        })
-    df = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
-    save_users(df)
+    st.markdown("### 멘토링 목적·주제")
+    purpose = st.multiselect("멘토링을 통해 얻고 싶은 것(복수)", PURPOSES, default=["진로 / 커리어 조언", "학업 / 전문지식 조언"])
+    topics = st.multiselect("주로 이야기하고 싶은 주제(복수)", TOPIC_PREFS, default=["진로·직업", "학업·전문 지식"])
 
-# -----------------------------
-# 메인
-# -----------------------------
-def main():
-    st.set_page_config(page_title="멘토-멘티 매칭", page_icon="🤝", layout="wide")
-    ensure_dirs()
-    header()
-    page = sidebar()
+    st.markdown("### 희망 멘토 정보")
+    wanted_majors = st.multiselect("관심 멘토 직군(복수)", OCCUPATION_MAJORS, default=["연구개발/ IT", "교육", "법률/행정"])
+    wanted_mentor_ages = st.multiselect("멘토 선호 나이대(선택)", AGE_BANDS, default=[])
 
-    if page == "홈":
-        st.markdown("""
-        ### 어떻게 동작하나요?
-        1) **회원가입/로그인**
-        2) **프로필 설문** 작성
-        3) **매칭 찾기**에서 맞춤 추천 확인 및 저장
-        4) **내 매칭**에서 저장한 추천 확인
-        """)
-        st.info("관리자 비밀번호 기본값: admin123 (환경변수 ADMIN_PASS 로 변경 가능)")
+    note = st.text_area("한 줄 요청사항(선택, 100자 이내)", max_chars=120, placeholder="예: 데이터 분석 직무 이직 준비 중, 포트폴리오 피드백 받고 싶어요")
 
-    elif page == "회원가입/로그인":
-        col1, col2 = st.columns(2)
-        with col1: signup_box()
-        with col2: login_box()
+    submitted = st.form_submit_button("추천 멘토 보기", use_container_width=True)
 
-    elif page == "프로필 설문":
-        profile_form()
+if not submitted:
+    st.info("왼쪽 설문을 입력하고 '추천 멘토 보기'를 눌러주세요.")
+    st.stop()
 
-    elif page == "매칭 찾기":
-        find_matches()
+# ---- 매칭 계산 ----
+mentee_payload = {
+    "name": name.strip(),
+    "gender": gender,
+    "age_band": age_band,
+    "comm_modes": set(comm_modes),
+    "time_slots": set(time_slots),
+    "days": set(days),
+    "style": style,
+    "interests": set(interests),
+    "purpose": set(purpose),
+    "topics": set(topics),
+    "wanted_majors": set(wanted_majors),
+    "wanted_mentor_ages": set(wanted_mentor_ages),
+    "note": note.strip(),
+}
 
-    elif page == "내 매칭":
-        my_matches()
+scores = []
+for idx, row in mentors_df.iterrows():
+    s = compute_score(mentee_payload, row)
+    scores.append({"idx": idx, "name": row.get("name", ""), **s})
 
-    elif page == "관리자 대시보드":
-        admin_dashboard()
+ranked = sorted(scores, key=lambda x: x["total"], reverse=True)[:5]
 
-if __name__ == "__main__":
-    main()
+st.markdown("---")
+st.subheader("3) 추천 결과")
+
+if not ranked:
+    st.warning("추천 결과가 없습니다. 설문 입력을 다시 확인해 주세요.")
+    st.stop()
+
+# 카드 표시
+for i, item in enumerate(ranked, start=1):
+    r = mentors_df.loc[item["idx"]]
+    with st.container(border=True):
+        st.markdown(f"### #{i}. {r.get('name','(이름없음)')} · {str(r.get('occupation_major','')).strip()} · {str(r.get('age_band','')).strip()}")
+        cols = st.columns(3)
+        with cols[0]:
+            st.write(f"**총점**: {item['total']}점")
+            bd = item["breakdown"]
+            st.write(
+                f"- 목적·주제: {bd['목적·주제']}\n"
+                f"- 소통 선호: {bd['소통 선호']}\n"
+                f"- 관심사/성향: {bd['관심사/성향']}\n"
+                f"- 멘토 적합도: {bd['멘토 적합도']}\n"
+                f"- 텍스트: {bd['텍스트']}\n"
+                f"- 스타일: {bd['스타일']}"
+            )
+        with cols[1]:
+            st.write("**소통 가능**")
+            st.write("방법: ", r.get("comm_modes", "-"))
+            st.write("시간대: ", r.get("comm_time", "-"))
+            st.write("요일: ", r.get("comm_days", "-"))
+            st.write("스타일: ", r.get("style", "-"))
+        with cols[2]:
+            st.write("**관심사/주제**")
+            st.write("관심사: ", r.get("interests", "-"))
+            st.write("목적: ", r.get("purpose", "-"))
+            st.write("대화 주제: ", r.get("topic_prefs", "-"))
+        with st.expander("멘토 소개 보기"):
+            st.write(r.get("intro", ""))
+
+# 결과 다운로드 (CSV)
+export_cols = [
+    "name", "gender", "age_band", "occupation_major", "occupation_minor",
+    "comm_modes", "comm_time", "comm_days", "style", "interests",
+    "purpose", "topic_prefs", "intro"
+]
+rec_df = mentors_df.loc[[x["idx"] for x in ranked], export_cols]
+rec_buf = io.StringIO()
+rec_df.to_csv(rec_buf, index=False)
+
+st.download_button(
+    label="추천 결과 5명 CSV 다운로드",
+    data=rec_buf.getvalue().encode("utf-8-sig"),
+    file_name="gyeol_recommended_mentors.csv",
+    mime="text/csv",
+    use_container_width=True,
+)
+
+st.caption("※ 본 데모는 설명 가능한 규칙 + 경량 텍스트 유사도를 사용합니다. 가중치 조정 및 유사군 확장은 코드 상단 상수에서 쉽게 변경 가능합니다.")
