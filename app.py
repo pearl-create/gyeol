@@ -1,22 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-결(結) — 멘티 전용 박람회 체험용 매칭 데모 앱 (전체 코드)
+결(結) — 멘티 전용 박람회 체험용 매칭 데모 앱 (전체 코드, 아바타 선택/경로 호환 강화)
 
-변경 요약
-- 멘토 데이터 입력 UI 제거(기본 CSV 자동 로드)
-- "2) 멘티 설문" → "2) 연결될 준비" 제목 변경
-- 나이대 선택 직후 아바타(사전 제공 6장) 선택 UI 추가
-- style selectbox의 help를 삼중 따옴표로 교정(문법 오류 해결)
-- 추천 카드 상단에 선택한 아바타 표시
-- 간단한 **내부 테스트 패널(debug)** 추가: 점수 계산이 0~100인지 확인
+주요 포인트
+- st.experimental_get_query_params → st.query_params (deprecation 해결)
+- 아바타: "게임 스킨 고르기" UX (썸네일 타일 클릭 선택) + 추가 업로드 병행
+- Windows 절대경로/스페이스/한글 경로 대응: 경로 정규화 + 존재 확인 + 관리자용 디렉터리 스캔(glob)
+- 관리자 전용: ?admin=1 에서 멘토 CSV 업로드 + 아바타 디렉터리 지정 가능(로컬 폴더 스캔)
+- 도움말 문자열 삼중따옴표로 고정(문법 오류 방지)
 
 실행
     streamlit run gyeol_mentee_demo_app.py
 """
 
 import io
-from typing import Set, Dict
 import os
+from glob import glob
+from pathlib import Path
+from typing import Set, Dict
 
 import pandas as pd
 import streamlit as st
@@ -62,27 +63,8 @@ INTERESTS = {
 PURPOSES = ["진로 / 커리어 조언", "학업 / 전문지식 조언", "사회, 인생 경험 공유", "정서적 지지와 대화"]
 TOPIC_PREFS = ["진로·직업", "학업·전문 지식", "인생 경험·삶의 가치관", "대중문화·취미", "사회 문제·시사", "건강·웰빙"]
 
-# 스타일 상호 보완관계(가산점)
-COMPLEMENT_PAIRS = {
-    ("연두부형", "분위기메이커형"),
-    ("연두부형", "냉철한 조언자형"),
-    ("감성 충만형", "효율추구형"),
-    ("댕댕이형", "효율추구형"),
-    ("분위기메이커형", "냉철한 조언자형"),
-}
-
-# 직군 유사군(정확 일치가 아니어도 부분 가점)
-SIMILAR_MAJORS = {
-    ("의학/보건", "의료/보건 서비스"),
-    ("영업 원", "판매"),
-    ("서비스", "서비스 전문"),
-    ("기술/기능", "건설/시설"),
-    ("운송/기계", "운송 관리"),
-    ("행정관리", "일반 사무"),
-}
-
 # -----------------------------
-# 유틸 함수
+# 매칭 유틸리티
 # -----------------------------
 
 def ratio_overlap(a: Set[str], b: Set[str]) -> float:
@@ -100,10 +82,13 @@ def list_to_set(cell: str) -> Set[str]:
 def style_score(mentee_style: str, mentor_style: str) -> int:
     if mentee_style and mentor_style:
         if mentee_style == mentor_style:
-            return 5  # 동일형 가점
-        pair = (mentee_style, mentor_style)
-        rev_pair = (mentor_style, mentee_style)
-        if pair in COMPLEMENT_PAIRS or rev_pair in COMPLEMENT_PAIRS:
+            return 5
+        complement = {
+            ("연두부형", "분위기메이커형"), ("연두부형", "냉철한 조언자형"),
+            ("감성 충만형", "효율추구형"), ("댕댕이형", "효율추구형"),
+            ("분위기메이커형", "냉철한 조언자형")
+        }
+        if (mentee_style, mentor_style) in complement or (mentor_style, mentee_style) in complement:
             return 10
         return 3
     return 0
@@ -114,7 +99,11 @@ def major_score(wanted_majors: Set[str], mentor_major: str) -> int:
         return 0
     if mentor_major in wanted_majors:
         return 12
-    for a, b in SIMILAR_MAJORS:
+    similar = {
+        ("의학/보건", "의료/보건 서비스"), ("영업 원", "판매"), ("서비스", "서비스 전문"),
+        ("기술/기능", "건설/시설"), ("운송/기계", "운송 관리"), ("행정관리", "일반 사무")
+    }
+    for a, b in similar:
         if (a in wanted_majors and mentor_major == b) or (b in wanted_majors and mentor_major == a):
             return 6
     return 0
@@ -122,24 +111,15 @@ def major_score(wanted_majors: Set[str], mentor_major: str) -> int:
 
 def age_band_normalize(label: str) -> str:
     s = str(label).strip()
-    if s.startswith("20") or "20" in s:
-        return "만 20세~29세"
-    if s.startswith("30") or "30" in s:
-        return "만 30세~39세"
-    if s.startswith("40") or "40" in s:
-        return "만 40세~49세"
-    if s.startswith("50") or "50" in s:
-        return "만 50세~59세"
-    if s.startswith("60") or "60" in s:
-        return "만 60세~69세"
-    if s.startswith("70") or "70" in s:
-        return "만 70세~79세"
-    if s.startswith("80") or "80" in s:
-        return "만 80세~89세"
-    if "90" in s:
-        return "만 90세 이상"
-    if "13" in s or "19" in s:
-        return "만 13세~19세"
+    if s.startswith("20") or "20" in s: return "만 20세~29세"
+    if s.startswith("30") or "30" in s: return "만 30세~39세"
+    if s.startswith("40") or "40" in s: return "만 40세~49세"
+    if s.startswith("50") or "50" in s: return "만 50세~59세"
+    if s.startswith("60") or "60" in s: return "만 60세~69세"
+    if s.startswith("70") or "70" in s: return "만 70세~79세"
+    if s.startswith("80") or "80" in s: return "만 80세~89세"
+    if "90" in s: return "만 90세 이상"
+    if "13" in s or "19" in s: return "만 13세~19세"
     return s
 
 
@@ -158,18 +138,12 @@ def age_preference_score(preferred: Set[str], mentor_age_band: str) -> int:
 
 
 def tfidf_similarity(text_a: str, text_b: str) -> float:
-    a = (text_a or "").strip()
-    b = (text_b or "").strip()
-    if not a or not b:
-        return 0.0
+    a = (text_a or "").strip(); b = (text_b or "").strip()
+    if not a or not b: return 0.0
     vec = TfidfVectorizer(max_features=500, ngram_range=(1, 2))
     X = vec.fit_transform([a, b])
     return float(cosine_similarity(X[0], X[1])[0, 0])
 
-
-# -----------------------------
-# 점수 계산
-# -----------------------------
 
 def compute_score(mentee: Dict, mentor_row: pd.Series) -> Dict:
     mentor_comm_modes = list_to_set(mentor_row.get("comm_modes", ""))
@@ -219,79 +193,97 @@ def compute_score(mentee: Dict, mentor_row: pd.Series) -> Dict:
         }
     }
 
-
 # -----------------------------
-# UI
+# 데이터 로딩 & 관리자 모드
 # -----------------------------
 st.set_page_config(page_title="결 — 멘토 추천 데모", page_icon="🤝", layout="centered")
 
 st.title("결 — 멘토 추천 체험(멘티 전용)")
 st.caption("입력 데이터는 체험 종료 시 삭제됩니다. QR/다운로드 저장을 선택하지 않는 한 서버에 남지 않습니다.")
 
-# 멘토 데이터 로딩 (입력 UI 숨김)
 @st.cache_data(show_spinner=False)
 def load_default_csv() -> pd.DataFrame:
-    paths = [
-        "C:/Users/user/Downloads/결 더미 멘토  - ________20_.csv",
-    ]
-    for p in paths:
+    for p in ["gyeol_dummy_mentors_20.csv", "/mnt/data/gyeol_dummy_mentors_20.csv"]:
         try:
             return pd.read_csv(p)
-      
+        except Exception:
+            continue
+    return pd.DataFrame([])
 
-# 관리자(운영자) 전용 업로드: URL에 ?admin=1 이 있으면 보임
 params = st.query_params
 ADMIN_MODE = params.get("admin", "0") == "1"
 
 if ADMIN_MODE:
-    with st.expander("관리자 전용: 멘토 CSV 업로드", expanded=False):
-        admin_up = st.file_uploader("멘토 데이터 CSV 업로드 (columns: name, gender, age_band, ...)", type=["csv"], key="admin_csv")
+    with st.expander("관리자 전용: 데이터/아바타 설정", expanded=False):
+        admin_up = st.file_uploader("멘토 데이터 CSV 업로드", type=["csv"], key="admin_csv")
+        avatar_dir = st.text_input("아바타 디렉터리 경로(선택)", value="")
+        st.caption("예: C:/Users/user/Downloads/결 아바타  또는  ./avatars")
         if admin_up is not None:
             mentors_df = pd.read_csv(admin_up)
         else:
             mentors_df = load_default_csv()
+        st.session_state["ADMIN_AVATAR_DIR"] = avatar_dir.strip()
 else:
     mentors_df = load_default_csv()
 
 st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명")
 
+# -----------------------------
+# 폼: 연결 준비 + 아바타 선택
+# -----------------------------
 st.markdown("---")
 st.subheader("2) 연결될 준비")
 
-# ---- 설문 입력 ----
+# 경로 정규화 & 스캔 유틸
+
+def norm_path(p: str) -> str:
+    if not p: return ""
+    # Windows C:\, 공백, 한글 모두 허용. ~, ./, ../ 처리
+    return str(Path(p).expanduser().resolve()) if Path(p).exists() else str(Path(p).expanduser())
+
+
+def scan_avatar_dir(dir_path: str):
+    if not dir_path:
+        return []
+    p = norm_path(dir_path)
+    patterns = ["*.png", "*.jpg", "*.jpeg", "*.webp"]
+    files = []
+    for pat in patterns:
+        files.extend(glob(str(Path(p) / pat)))
+    return [f for f in files if os.path.exists(f)]
+
 with st.form("mentee_form"):
     name = st.text_input("이름", value="")
     gender = st.radio("성별", GENDERS, horizontal=True, index=0)
     age_band = st.selectbox("나이대", AGE_BANDS, index=0)
 
-    # 아바타 선택 (게임 스킨 고르기 스타일)
+    # 1) 기본 제공 + 2) 관리자 지정 디렉터리 + 3) 사용자 업로드  => 옵션 풀 구성
     st.markdown("### 내 아바타 선택")
-    import os
-
-    # 1) 기본 제공 아바타 경로들
-    base_avatar_paths = [
-        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391.png",
-        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391_01.png",
-        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391_02.png",
-        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391_03.png",
-        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391_04.png",
-        "C:/Users/user/Downloads/결 아바타/KakaoTalk_20250919_142949391_05.png",
-
+    default_paths = [
+        "/mnt/data/KakaoTalk_20250919_142949391.png",
+        "/mnt/data/KakaoTalk_20250919_142949391_01.png",
+        "/mnt/data/KakaoTalk_20250919_142949391_02.png",
+        "/mnt/data/KakaoTalk_20250919_142949391_03.png",
+        "/mnt/data/KakaoTalk_20250919_142949391_04.png",
+        "/mnt/data/KakaoTalk_20250919_142949391_05.png",
     ]
-    base_avatar_paths = [p for p in base_avatar_paths if os.path.exists(p)]
+    default_paths = [p for p in default_paths if os.path.exists(p)]
 
-    # 2) 사용자가 추가 업로드 (여러 장 가능)
+    admin_dir = st.session_state.get("ADMIN_AVATAR_DIR", "").strip()
+    admin_paths = scan_avatar_dir(admin_dir) if admin_dir else []
+
     uploaded_files = st.file_uploader(
         "프로필/아바타 이미지 업로드 (여러 장 가능)",
-        type=["png","jpg","jpeg","webp"],
+        type=["png", "jpg", "jpeg", "webp"],
         accept_multiple_files=True,
         key="avatar_uploader_any",
-        help="게임 스킨 고르듯 썸네일을 눌러 선택할 수 있어요. 업로드하면 목록에 합쳐집니다.")
+        help="게임 스킨 고르듯 썸네일을 클릭해 선택하세요. 업로드하면 목록에 합쳐집니다.")
 
-    # 3) 옵션 풀 만들기: 기본 경로 + 업로드
-    avatar_options = []  # list of dict: {label, source, kind, bytes?, path?}
-    for i, p in enumerate(base_avatar_paths):
+    avatar_options = []  # [{label, kind, path/file, bytes}]
+    for i, p in enumerate(default_paths):
         avatar_options.append({"label": f"기본 {i+1}", "kind": "path", "path": p})
+    for p in admin_paths:
+        avatar_options.append({"label": f"관리자 {Path(p).name}", "kind": "path", "path": p})
     if uploaded_files:
         for f in uploaded_files:
             try:
@@ -299,11 +291,9 @@ with st.form("mentee_form"):
             except Exception:
                 pass
 
-    # 선택 인덱스 상태
     if "selected_avatar_index" not in st.session_state and avatar_options:
         st.session_state["selected_avatar_index"] = 0
 
-    # 4) 썸네일 그리드 + 클릭 선택
     if avatar_options:
         cols_per_row = 3
         for start in range(0, len(avatar_options), cols_per_row):
@@ -321,6 +311,27 @@ with st.form("mentee_form"):
                             st.image(opt.get("file", opt.get("bytes")), use_container_width=True)
                     except Exception:
                         st.write("(이미지 로드 실패)")
+                    selected = (st.session_state.get("selected_avatar_index") == idx)
+                    btn_label = ("✅ 선택됨 " if selected else "선택 ") + opt["label"]
+                    if st.button(btn_label, key=f"pick_avatar_{idx}"):
+                        st.session_state["selected_avatar_index"] = idx
+        sel_idx = st.session_state.get("selected_avatar_index", 0)
+        opt = avatar_options[sel_idx]
+        try:
+            if opt["kind"] == "path":
+                with open(opt["path"], "rb") as f:
+                    st.session_state['selected_avatar_bytes'] = f.read()
+                    st.session_state['selected_avatar_name'] = opt["label"]
+            else:
+                st.session_state['selected_avatar_bytes'] = opt.get("bytes")
+                st.session_state['selected_avatar_name'] = opt["label"]
+        except Exception:
+            st.warning("선택한 아바타 이미지를 불러오지 못했습니다.")
+    else:
+        st.info("사용 가능한 아바타 이미지가 없습니다. 업로드하거나 관리자 디렉터리를 설정하세요.")
+
+    # 소통 선호
+    st.markdown("### 소통 선호")
     comm_modes = st.multiselect("선호하는 소통 방법(복수)", COMM_MODES, default=["일반 채팅"])
     time_slots = st.multiselect("소통 가능한 시간대(복수)", TIME_SLOTS, default=["오후", "저녁"])
     days = st.multiselect("소통 가능한 요일(복수)", DAYS, default=["화", "목"])
@@ -336,37 +347,23 @@ with st.form("mentee_form"):
 냉철한 조언자형: 논리·문제 해결""",
     )
 
+    # 관심사·목적·선호 멘토
     st.markdown("### 관심사·취향")
     interests = []
     for grp, items in INTERESTS.items():
-        interests.extend(
-            st.multiselect(f"{grp}", items, default=[])
-        )
+        interests.extend(st.multiselect(f"{grp}", items, default=[]))
 
     st.markdown("### 멘토링 목적·주제")
-    purpose = st.multiselect(
-        "멘토링을 통해 얻고 싶은 것(복수)",
-        PURPOSES,
-        default=["진로 / 커리어 조언", "학업 / 전문지식 조언"],
-    )
-    topics = st.multiselect(
-        "주로 이야기하고 싶은 주제(복수)",
-        TOPIC_PREFS,
-        default=["진로·직업", "학업·전문 지식"],
-    )
+    PURPOSES = ["진로 / 커리어 조언", "학업 / 전문지식 조언", "사회, 인생 경험 공유", "정서적 지지와 대화"]
+    TOPIC_PREFS = ["진로·직업", "학업·전문 지식", "인생 경험·삶의 가치관", "대중문화·취미", "사회 문제·시사", "건강·웰빙"]
+    purpose = st.multiselect("멘토링을 통해 얻고 싶은 것(복수)", PURPOSES, default=["진로 / 커리어 조언", "학업 / 전문지식 조언"])
+    topics = st.multiselect("주로 이야기하고 싶은 주제(복수)", TOPIC_PREFS, default=["진로·직업", "학업·전문 지식"])
 
     st.markdown("### 희망 멘토 정보")
-    wanted_majors = st.multiselect(
-        "관심 멘토 직군(복수)", OCCUPATION_MAJORS,
-        default=["연구개발/ IT", "교육", "법률/행정"],
-    )
+    wanted_majors = st.multiselect("관심 멘토 직군(복수)", OCCUPATION_MAJORS, default=["연구개발/ IT", "교육", "법률/행정"])
     wanted_mentor_ages = st.multiselect("멘토 선호 나이대(선택)", AGE_BANDS, default=[])
 
-    note = st.text_area(
-        "한 줄 요청사항(선택, 100자 이내)",
-        max_chars=120,
-        placeholder="예: 데이터 분석 직무 이직 준비 중, 포트폴리오 피드백 받고 싶어요",
-    )
+    note = st.text_area("한 줄 요청사항(선택, 100자 이내)", max_chars=120, placeholder="예: 데이터 분석 직무 이직 준비 중, 포트폴리오 피드백 받고 싶어요")
 
     submitted = st.form_submit_button("추천 멘토 보기", use_container_width=True)
 
@@ -374,7 +371,13 @@ if not submitted:
     st.info("왼쪽 설문을 입력하고 '추천 멘토 보기'를 눌러주세요.")
     st.stop()
 
-# ---- 매칭 계산 ----
+# -----------------------------
+# 매칭 계산 & 결과 표시
+# -----------------------------
+if mentors_df is None or mentors_df.empty:
+    st.error("멘토 데이터가 없습니다. (?admin=1에서 CSV 업로드 또는 기본 CSV 배치)")
+    st.stop()
+
 mentee_payload = {
     "name": (name or "").strip(),
     "gender": gender,
@@ -405,37 +408,33 @@ if not ranked:
     st.warning("추천 결과가 없습니다. 설문 입력을 다시 확인해 주세요.")
     st.stop()
 
-# 카드 표시
 for i, item in enumerate(ranked, start=1):
     r = mentors_df.loc[item["idx"]]
     with st.container(border=True):
-        st.markdown(
-            f"### #{i}. {r.get('name','(이름없음)')} · {str(r.get('occupation_major','')).strip()} · {str(r.get('age_band','')).strip()}"
-        )
-        # 아바타 표시 (선택된 경우)
+        st.markdown(f"### #{i}. {r.get('name','(이름없음)')} · {str(r.get('occupation_major','')).strip()} · {str(r.get('age_band','')).strip()}")
         if 'selected_avatar_bytes' in st.session_state:
             st.image(st.session_state['selected_avatar_bytes'], width=96)
         cols = st.columns(3)
         with cols[0]:
-            st.write(f"**총점**: {item['total']}점")
             bd = item["breakdown"]
-            st.write("- 목적·주제: ", bd['목적·주제'])
-            st.write("- 소통 선호: ", bd['소통 선호'])
-            st.write("- 관심사/성향: ", bd['관심사/성향'])
-            st.write("- 멘토 적합도: ", bd['멘토 적합도'])
-            st.write("- 텍스트: ", bd['텍스트'])
-            st.write("- 스타일: ", bd['스타일'])
+            st.write(f"**총점**: {item['total']}점")
+            st.write("- 목적·주제:", bd['목적·주제'])
+            st.write("- 소통 선호:", bd['소통 선호'])
+            st.write("- 관심사/성향:", bd['관심사/성향'])
+            st.write("- 멘토 적합도:", bd['멘토 적합도'])
+            st.write("- 텍스트:", bd['텍스트'])
+            st.write("- 스타일:", bd['스타일'])
         with cols[1]:
             st.write("**소통 가능**")
-            st.write("방법: ", r.get("comm_modes", "-"))
-            st.write("시간대: ", r.get("comm_time", "-"))
-            st.write("요일: ", r.get("comm_days", "-"))
-            st.write("스타일: ", r.get("style", "-"))
+            st.write("방법:", r.get("comm_modes", "-"))
+            st.write("시간대:", r.get("comm_time", "-"))
+            st.write("요일:", r.get("comm_days", "-"))
+            st.write("스타일:", r.get("style", "-"))
         with cols[2]:
             st.write("**관심사/주제**")
-            st.write("관심사: ", r.get("interests", "-"))
-            st.write("목적: ", r.get("purpose", "-"))
-            st.write("대화 주제: ", r.get("topic_prefs", "-"))
+            st.write("관심사:", r.get("interests", "-"))
+            st.write("목적:", r.get("purpose", "-"))
+            st.write("대화 주제:", r.get("topic_prefs", "-"))
         with st.expander("멘토 소개 보기"):
             st.write(r.get("intro", ""))
 
@@ -446,8 +445,7 @@ export_cols = [
     "purpose", "topic_prefs", "intro"
 ]
 rec_df = mentors_df.loc[[x["idx"] for x in ranked], export_cols]
-rec_buf = io.StringIO()
-rec_df.to_csv(rec_buf, index=False)
+rec_buf = io.StringIO(); rec_df.to_csv(rec_buf, index=False)
 
 st.download_button(
     label="추천 결과 5명 CSV 다운로드",
@@ -456,48 +454,5 @@ st.download_button(
     mime="text/csv",
     use_container_width=True,
 )
-
-# -----------------------------
-# 내부 테스트(간단) — 앱 우측 하단에 표시
-# -----------------------------
-with st.expander("내부 테스트(디버그)"):
-    try:
-        if len(mentors_df) > 0:
-            _dummy_mentee = {
-                "purpose": {"진로 / 커리어 조언"},
-                "topics": {"진로·직업"},
-                "comm_modes": {"일반 채팅"},
-                "time_slots": {"오후"},
-                "days": {"화"},
-                "interests": {"독서", "여행"},
-                "wanted_majors": {"연구개발/ IT"},
-                "wanted_mentor_ages": {"만 30세~39세"},
-                "style": "연두부형",
-                "note": "데이터 분야 진로 상담"
-            }
-            test_score = compute_score(_dummy_mentee, mentors_df.iloc[0])
-            ok_range = 0 <= test_score["total"] <= 100
-            st.write("테스트1 — 점수 범위(0~100):", "PASS" if ok_range else "FAIL", test_score)
-        # 스타일 보완형 테스트
-        from types import SimpleNamespace
-        fake_row = SimpleNamespace(
-            **{"comm_modes":"","comm_time":"","comm_days":"","interests":"",
-               "purpose":"","topic_prefs":"","style":"분위기메이커형","occupation_major":"",
-               "intro":"","age_band":"만 30세~39세"}
-        )
-        st.write("테스트2 — 스타일 보완 가산점:", compute_score({
-            "purpose": set(),
-            "topics": set(),
-            "comm_modes": set(),
-            "time_slots": set(),
-            "days": set(),
-            "interests": set(),
-            "wanted_majors": set(),
-            "wanted_mentor_ages": set(),
-            "style": "연두부형",
-            "note": ""
-        }, pd.Series(vars(fake_row))))
-    except Exception as e:
-        st.error(f"내부 테스트 실패: {e}")
 
 st.caption("※ 본 데모는 설명 가능한 규칙 + 경량 텍스트 유사도를 사용합니다. 가중치 조정 및 유사군 확장은 코드 상단 상수에서 쉽게 변경 가능합니다.")
