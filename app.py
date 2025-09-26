@@ -12,7 +12,7 @@
 실행
     streamlit run gyeol_mentee_demo_app.py
 """
-
+streamlit-image-select==0.6.0
 import io
 import os
 from glob import glob
@@ -26,18 +26,21 @@ from sklearn.metrics.pairwise import cosine_similarity
 from pathlib import Path
 
 # ----- 아바타 고정 세트 로더 (Streamlit Cloud 호환) -----
-def load_fixed_avatars() -> list:
-    """./avatars, /app/avatars, /mnt/data/avatars 폴더에서 png/jpg/webp를 스캔해 고정 세트를 반환"""
-    search_roots = [
-        Path.cwd() / "avatars",
-        Path("/app/avatars"),
-        Path("/mnt/data/avatars"),
-    ]
-    exts = (".png", ".jpg", ".jpeg", ".webp")
-    paths = []
-    for root in search_roots:
-        if root.exists():
-            paths.extend([str(p) for p in sorted(root.iterdir()) if p.suffix.lower() in exts])
+from pathlib import Path
+
+def load_fixed_avatars() -> list[str]:
+    """
+    리포지토리 루트(현재 작업 디렉터리)에서 png/jpg/jpeg/webp 파일을 스캔.
+    (예: KakaoTalk_20250919_142949391*.png 처럼 올려둔 파일들)
+    """
+    root = Path.cwd()
+    exts = {".png", ".jpg", ".jpeg", ".webp"}
+    # 이름 패턴이 있다면 여기에 추가 필터를 줄 수 있음.
+    # ex) if not p.name.startswith("KakaoTalk_20250919_142949391"): continue
+    paths: list[str] = []
+    for p in sorted(root.iterdir()):
+        if p.suffix.lower() in exts:
+            paths.append(str(p))
     return paths
 
 # -----------------------------
@@ -246,64 +249,31 @@ st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명")
 
 # -----------------------------
 # 폼: 연결 준비 + 아바타 선택
-# -----------------------------
-st.markdown("---")
-st.subheader("2) 연결될 준비")
 
-# 경로 정규화 & 스캔 유틸
+ st.markdown("### 내 아바타 선택")
+avatar_paths = load_fixed_avatars()
 
-def norm_path(p: str) -> str:
-    if not p: return ""
-    # Windows C:\, 공백, 한글 모두 허용. ~, ./, ../ 처리
-    return str(Path(p).expanduser().resolve()) if Path(p).exists() else str(Path(p).expanduser())
+if not avatar_paths:
+    st.warning("리포지토리 루트에 PNG/JPG/WEBP 파일이 없습니다. (예: KakaoTalk_...png)")
+else:
+    # 이미지 자체 클릭으로 선택 (썸네일 그리드)
+    captions = [Path(p).name for p in avatar_paths]  # 파일명 라벨
+    selected_path = image_select(
+        label="이미지를 클릭해 선택하세요",
+        images=avatar_paths,
+        captions=captions,
+        use_container_width=True,   # 그리드 폭에 맞춤
+        return_value="original",    # 원본 값(경로)을 반환
+        key="avatar_image_select",
+    )
+    # 선택 저장 (추천 카드에서 썸네일로 사용)
+    try:
+        with open(selected_path, "rb") as f:
+            st.session_state["selected_avatar_bytes"] = f.read()
+            st.session_state["selected_avatar_name"]  = Path(selected_path).name
+    except Exception:
+        st.warning("선택한 아바타 이미지를 불러오지 못했습니다.")
 
-
-def scan_avatar_dir(dir_path: str):
-    if not dir_path:
-        return []
-    p = norm_path(dir_path)
-    patterns = ["*.png", "*.jpg", "*.jpeg", "*.webp"]
-    files = []
-    for pat in patterns:
-        files.extend(glob(str(Path(p) / pat)))
-    return [f for f in files if os.path.exists(f)]
-
-with st.form("mentee_form"):
-    name = st.text_input("이름", value="")
-    gender = st.radio("성별", GENDERS, horizontal=True, index=0)
-    age_band = st.selectbox("나이대", AGE_BANDS, index=0)
-
-    # 1) 기본 제공 + 2) 관리자 지정 디렉터리 + 3) 사용자 업로드  => 옵션 풀 구성
-    st.markdown("### 내 아바타 선택")
-    avatar_paths = load_fixed_avatars()
-
-    if not avatar_paths:
-        st.warning("아바타 고정 세트를 찾을 수 없습니다. 리포지토리 루트에 avatars/ 폴더를 만들고 이미지를 넣어주세요.")
-    else:
-        if "selected_avatar_index" not in st.session_state:
-            st.session_state["selected_avatar_index"] = 0
-        cols_per_row = 4
-        for start in range(0, len(avatar_paths), cols_per_row):
-            cols = st.columns(cols_per_row)
-            for j, col in enumerate(cols):
-                idx = start + j
-                if idx >= len(avatar_paths):
-                    continue
-                with col:
-                    path = avatar_paths[idx]
-                    st.image(path, use_container_width=True)
-                    selected = (st.session_state.get("selected_avatar_index") == idx)
-                    label = ("✅ 선택됨 " if selected else "선택 ") + f"아바타 {idx+1}"
-                    if st.button(label, key=f"pick_avatar_{idx}"):
-                        st.session_state["selected_avatar_index"] = idx
-        # 최종 선택 바이트 저장
-        sel_idx = st.session_state.get("selected_avatar_index", 0)
-        try:
-            with open(avatar_paths[sel_idx], "rb") as f:
-                st.session_state['selected_avatar_bytes'] = f.read()
-                st.session_state['selected_avatar_name'] = f"아바타 {sel_idx+1}"
-        except Exception:
-            st.warning("선택한 아바타 이미지를 불러오지 못했습니다.")
 
     st.markdown("### 소통 선호")
     comm_modes = st.multiselect("선호하는 소통 방법(복수)", COMM_MODES, default=["일반 채팅"])
