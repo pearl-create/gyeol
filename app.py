@@ -1,21 +1,22 @@
+# app.py
 # -*- coding: utf-8 -*-
 """
-결(結) — 멘티 전용 박람회 체험용 매칭 데모 앱 (전체 코드, 아바타 선택/경로 호환 강화)
+결(結) — 멘티 전용 박람회 체험용 매칭 데모 앱 (전체 반영판)
 
-주요 포인트
-- st.experimental_get_query_params → st.query_params (deprecation 해결)
-- 아바타: "게임 스킨 고르기" UX (썸네일 타일 클릭 선택) + 추가 업로드 병행
-- Windows 절대경로/스페이스/한글 경로 대응: 경로 정규화 + 존재 확인 + 관리자용 디렉터리 스캔(glob)
-- 관리자 전용: ?admin=1 에서 멘토 CSV 업로드 + 아바타 디렉터리 지정 가능(로컬 폴더 스캔)
-- 도움말 문자열 삼중따옴표로 고정(문법 오류 방지)
+수정 요약
+- 아바타 선택을 **폼 바깥**으로 이동하여 Missing Submit Button 경고 해결
+- `streamlit-image-select`로 **이미지 자체 클릭** 선택 UX 적용
+- `load_fixed_avatars()`가 `avatars`가 파일일 때 발생하던 **NotADirectoryError** 방지
+  (폴더 여부 `is_dir()` 검사 + 리포지토리 **루트**에서도 이미지 스캔)
+- `st.experimental_get_query_params` → **`st.query_params`** 사용
+- 스타일 도움말 문자열을 **삼중 따옴표**로 안전 처리
 
 실행
-    streamlit run gyeol_mentee_demo_app.py
+- Streamlit Cloud 또는 로컬: `streamlit run app.py`
+- (권장) requirements.txt에 `streamlit-image-select==0.6.0` 추가 필요
 """
-streamlit-image-select==0.6.0
+
 import io
-import os
-from glob import glob
 from pathlib import Path
 from typing import Set, Dict
 
@@ -23,45 +24,20 @@ import pandas as pd
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from pathlib import Path
+from streamlit_image_select import image_select
 
-# ----- 아바타 고정 세트 로더 (Streamlit Cloud 호환) -----
-from pathlib import Path
-
-def load_fixed_avatars() -> list[str]:
-    """
-    리포지토리 루트(현재 작업 디렉터리)에서 png/jpg/jpeg/webp 파일을 스캔.
-    (예: KakaoTalk_20250919_142949391*.png 처럼 올려둔 파일들)
-    """
-    root = Path.cwd()
-    exts = {".png", ".jpg", ".jpeg", ".webp"}
-    # 이름 패턴이 있다면 여기에 추가 필터를 줄 수 있음.
-    # ex) if not p.name.startswith("KakaoTalk_20250919_142949391"): continue
-    paths: list[str] = []
-    for p in sorted(root.iterdir()):
-        if p.suffix.lower() in exts:
-            paths.append(str(p))
-    return paths
-
-# -----------------------------
-# 상수/어휘 정의
-# -----------------------------
+# =========================
+# 상수
+# =========================
 GENDERS = ["남", "여", "기타"]
 AGE_BANDS = [
     "만 13세~19세", "만 20세~29세", "만 30세~39세", "만 40세~49세",
     "만 50세~59세", "만 60세~69세", "만 70세~79세", "만 80세~89세", "만 90세 이상"
 ]
-
-COMM_MODES = ["대면 만남", "화상채팅", "일반 채팅"]
-TIME_SLOTS = ["오전", "오후", "저녁", "밤"]
-DAYS = ["월", "화", "수", "목", "금", "토", "일"]
-
-# 스타일 6종
-STYLES = [
-    "연두부형", "분위기메이커형", "효율추구형", "댕댕이형", "감성 충만형", "냉철한 조언자형"
-]
-
-# 직군(대분류)
+COMM_MODES  = ["대면 만남", "화상채팅", "일반 채팅"]
+TIME_SLOTS  = ["오전", "오후", "저녁", "밤"]
+DAYS        = ["월", "화", "수", "목", "금", "토", "일"]
+STYLES = ["연두부형", "분위기메이커형", "효율추구형", "댕댕이형", "감성 충만형", "냉철한 조언자형"]
 OCCUPATION_MAJORS = [
     "경영자", "행정관리", "의학/보건", "법률/행정", "교육", "연구개발/ IT",
     "예술/디자인", "기술/기능", "서비스 전문", "일반 사무", "영업 원",
@@ -69,8 +45,6 @@ OCCUPATION_MAJORS = [
     "농림수산업", "운송/기계", "운송 관리", "청소 / 경비", "단순노무",
     "학생", "전업주부", "구직자 / 최근 퇴사자 / 프리랜서(임시)", "기타"
 ]
-
-# 관심사 카테고리
 INTERESTS = {
     "여가/취미": ["독서", "음악 감상", "영화/드라마 감상", "게임", "운동/스포츠 관람", "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래"],
     "학문/지적 관심사": ["인문학", "사회과학", "자연과학", "수학/논리 퍼즐", "IT/테크놀로지", "환경/지속가능성"],
@@ -78,69 +52,69 @@ INTERESTS = {
     "대중문화": ["K-POP", "아이돌/연예인", "유튜브/스트리밍", "웹툰/웹소설", "스포츠 스타"],
     "성향": ["혼자 보내는 시간 선호", "친구들과 어울리기 선호", "실내 활동 선호", "야외 활동 선호", "새로움 추구", "안정감 추구"],
 }
+PURPOSES   = ["진로 / 커리어 조언", "학업 / 전문지식 조언", "사회, 인생 경험 공유", "정서적 지지와 대화"]
+TOPIC_PREFS= ["진로·직업", "학업·전문 지식", "인생 경험·삶의 가치관", "대중문화·취미", "사회 문제·시사", "건강·웰빙"]
 
-PURPOSES = ["진로 / 커리어 조언", "학업 / 전문지식 조언", "사회, 인생 경험 공유", "정서적 지지와 대화"]
-TOPIC_PREFS = ["진로·직업", "학업·전문 지식", "인생 경험·삶의 가치관", "대중문화·취미", "사회 문제·시사", "건강·웰빙"]
+COMPLEMENT_PAIRS = {
+    ("연두부형", "분위기메이커형"),
+    ("연두부형", "냉철한 조언자형"),
+    ("감성 충만형", "효율추구형"),
+    ("댕댕이형", "효율추구형"),
+    ("분위기메이커형", "냉철한 조언자형"),
+}
+SIMILAR_MAJORS = {
+    ("의학/보건", "의료/보건 서비스"),
+    ("영업 원", "판매"),
+    ("서비스", "서비스 전문"),
+    ("기술/기능", "건설/시설"),
+    ("운송/기계", "운송 관리"),
+    ("행정관리", "일반 사무"),
+}
 
-# -----------------------------
-# 매칭 유틸리티
-# -----------------------------
+# =========================
+# 유틸
+# =========================
+def list_to_set(cell: str) -> Set[str]:
+    if pd.isna(cell) or not str(cell).strip():
+        return set()
+    return {x.strip() for x in str(cell).replace(";", ",").split(",") if x.strip()}
 
 def ratio_overlap(a: Set[str], b: Set[str]) -> float:
     if not a or not b:
         return 0.0
     return len(a & b) / len(a | b)
 
-
-def list_to_set(cell: str) -> Set[str]:
-    if pd.isna(cell) or not str(cell).strip():
-        return set()
-    return {x.strip() for x in str(cell).replace(";", ",").split(",") if x.strip()}
-
-
 def style_score(mentee_style: str, mentor_style: str) -> int:
     if mentee_style and mentor_style:
         if mentee_style == mentor_style:
             return 5
-        complement = {
-            ("연두부형", "분위기메이커형"), ("연두부형", "냉철한 조언자형"),
-            ("감성 충만형", "효율추구형"), ("댕댕이형", "효율추구형"),
-            ("분위기메이커형", "냉철한 조언자형")
-        }
-        if (mentee_style, mentor_style) in complement or (mentor_style, mentee_style) in complement:
+        if (mentee_style, mentor_style) in COMPLEMENT_PAIRS or (mentor_style, mentee_style) in COMPLEMENT_PAIRS:
             return 10
         return 3
     return 0
-
 
 def major_score(wanted_majors: Set[str], mentor_major: str) -> int:
     if not mentor_major:
         return 0
     if mentor_major in wanted_majors:
         return 12
-    similar = {
-        ("의학/보건", "의료/보건 서비스"), ("영업 원", "판매"), ("서비스", "서비스 전문"),
-        ("기술/기능", "건설/시설"), ("운송/기계", "운송 관리"), ("행정관리", "일반 사무")
-    }
-    for a, b in similar:
+    for a, b in SIMILAR_MAJORS:
         if (a in wanted_majors and mentor_major == b) or (b in wanted_majors and mentor_major == a):
             return 6
     return 0
 
-
 def age_band_normalize(label: str) -> str:
     s = str(label).strip()
-    if s.startswith("20") or "20" in s: return "만 20세~29세"
-    if s.startswith("30") or "30" in s: return "만 30세~39세"
-    if s.startswith("40") or "40" in s: return "만 40세~49세"
-    if s.startswith("50") or "50" in s: return "만 50세~59세"
-    if s.startswith("60") or "60" in s: return "만 60세~69세"
-    if s.startswith("70") or "70" in s: return "만 70세~79세"
-    if s.startswith("80") or "80" in s: return "만 80세~89세"
-    if "90" in s: return "만 90세 이상"
     if "13" in s or "19" in s: return "만 13세~19세"
+    if "20" in s: return "만 20세~29세"
+    if "30" in s: return "만 30세~39세"
+    if "40" in s: return "만 40세~49세"
+    if "50" in s: return "만 50세~59세"
+    if "60" in s: return "만 60세~69세"
+    if "70" in s: return "만 70세~79세"
+    if "80" in s: return "만 80세~89세"
+    if "90" in s: return "만 90세 이상"
     return s
-
 
 def age_preference_score(preferred: Set[str], mentor_age_band: str) -> int:
     if not preferred or not mentor_age_band:
@@ -155,68 +129,48 @@ def age_preference_score(preferred: Set[str], mentor_age_band: str) -> int:
             return 2
     return 0
 
-
 def tfidf_similarity(text_a: str, text_b: str) -> float:
-    a = (text_a or "").strip(); b = (text_b or "").strip()
-    if not a or not b: return 0.0
+    a = (text_a or "").strip()
+    b = (text_b or "").strip()
+    if not a or not b:
+        return 0.0
     vec = TfidfVectorizer(max_features=500, ngram_range=(1, 2))
     X = vec.fit_transform([a, b])
     return float(cosine_similarity(X[0], X[1])[0, 0])
 
-
 def compute_score(mentee: Dict, mentor_row: pd.Series) -> Dict:
     mentor_comm_modes = list_to_set(mentor_row.get("comm_modes", ""))
     mentor_comm_times = list_to_set(mentor_row.get("comm_time", ""))
-    mentor_comm_days = list_to_set(mentor_row.get("comm_days", ""))
-    mentor_interests = list_to_set(mentor_row.get("interests", ""))
-    mentor_purposes = list_to_set(mentor_row.get("purpose", ""))
-    mentor_topics = list_to_set(mentor_row.get("topic_prefs", ""))
-    mentor_style = str(mentor_row.get("style", "")).strip()
-    mentor_major = str(mentor_row.get("occupation_major", "")).strip()
-    mentor_intro = str(mentor_row.get("intro", "")).strip()
-    mentor_age_band = str(mentor_row.get("age_band", "")).strip()
+    mentor_comm_days  = list_to_set(mentor_row.get("comm_days", ""))
+    mentor_interests  = list_to_set(mentor_row.get("interests", ""))
+    mentor_purposes   = list_to_set(mentor_row.get("purpose", ""))
+    mentor_topics     = list_to_set(mentor_row.get("topic_prefs", ""))
+    mentor_style      = str(mentor_row.get("style", "")).strip()
+    mentor_major      = str(mentor_row.get("occupation_major", "")).strip()
+    mentor_intro      = str(mentor_row.get("intro", "")).strip()
+    mentor_age_band   = str(mentor_row.get("age_band", "")).strip()
 
-    purpose_ratio = ratio_overlap(mentee["purpose"], mentor_purposes)
-    topics_ratio = ratio_overlap(mentee["topics"], mentor_topics)
-    s_purpose_topics = round(purpose_ratio * 18 + topics_ratio * 12)
+    s_purpose_topics = round(ratio_overlap(mentee["purpose"], mentor_purposes) * 18
+                             + ratio_overlap(mentee["topics"], mentor_topics) * 12)
+    s_comm = round(ratio_overlap(mentee["comm_modes"], mentor_comm_modes) * 8
+                   + ratio_overlap(mentee["time_slots"], mentor_comm_times) * 6
+                   + ratio_overlap(mentee["days"], mentor_comm_days) * 6)
+    s_interests = round(ratio_overlap(mentee["interests"], mentor_interests) * 20)
+    s_fit  = major_score(mentee["wanted_majors"], mentor_major) + \
+             age_preference_score(mentee["wanted_mentor_ages"], mentor_age_band)
+    s_text = round(tfidf_similarity(mentee.get("note", ""), mentor_intro) * 10)
+    s_style= style_score(mentee.get("style", ""), mentor_style)
 
-    modes_ratio = ratio_overlap(mentee["comm_modes"], mentor_comm_modes)
-    times_ratio = ratio_overlap(mentee["time_slots"], mentor_comm_times)
-    days_ratio = ratio_overlap(mentee["days"], mentor_comm_days)
-    s_comm = round(modes_ratio * 8 + times_ratio * 6 + days_ratio * 6)
+    total = int(max(0, min(100, s_purpose_topics + s_comm + s_interests + s_fit + s_text + s_style)))
+    return {"total": total, "breakdown": {
+        "목적·주제": s_purpose_topics, "소통 선호": s_comm, "관심사/성향": s_interests,
+        "멘토 적합도": s_fit, "텍스트": s_text, "스타일": s_style
+    }}
 
-    interest_ratio = ratio_overlap(mentee["interests"], mentor_interests)
-    s_interests = round(interest_ratio * 20)
-
-    s_major = major_score(mentee["wanted_majors"], mentor_major)
-    s_age = age_preference_score(mentee["wanted_mentor_ages"], mentor_age_band)
-    s_fit = s_major + s_age
-
-    sim = tfidf_similarity(mentee.get("note", ""), mentor_intro)
-    s_text = round(sim * 10)
-
-    s_style = style_score(mentee.get("style", ""), mentor_style)
-
-    total = s_purpose_topics + s_comm + s_interests + s_fit + s_text + s_style
-    total = int(max(0, min(100, total)))
-
-    return {
-        "total": total,
-        "breakdown": {
-            "목적·주제": s_purpose_topics,
-            "소통 선호": s_comm,
-            "관심사/성향": s_interests,
-            "멘토 적합도": s_fit,
-            "텍스트": s_text,
-            "스타일": s_style,
-        }
-    }
-
-# -----------------------------
-# 데이터 로딩 & 관리자 모드
-# -----------------------------
+# =========================
+# 데이터 로딩
+# =========================
 st.set_page_config(page_title="결 — 멘토 추천 데모", page_icon="🤝", layout="centered")
-
 st.title("결 — 멘토 추천 체험(멘티 전용)")
 st.caption("입력 데이터는 체험 종료 시 삭제됩니다. QR/다운로드 저장을 선택하지 않는 한 서버에 남지 않습니다.")
 
@@ -226,59 +180,102 @@ def load_default_csv() -> pd.DataFrame:
         try:
             return pd.read_csv(p)
         except Exception:
-            continue
-    return pd.DataFrame([])
+            pass
+    # 최소 더미 1명
+    return pd.DataFrame([{
+        "name":"김샘","gender":"남","age_band":"만 40세~49세","occupation_major":"교육",
+        "occupation_minor":"고등학교 교사","comm_modes":"대면 만남, 일반 채팅",
+        "comm_time":"오전, 오후","comm_days":"월, 수, 금","style":"연두부형",
+        "interests":"독서, 인문학, 건강/웰빙",
+        "purpose":"사회, 인생 경험 공유, 정서적 지지와 대화",
+        "topic_prefs":"인생 경험·삶의 가치관, 건강·웰빙",
+        "intro":"경청 중심의 상담을 합니다."
+    }])
 
+# 최신 API
 params = st.query_params
 ADMIN_MODE = params.get("admin", "0") == "1"
 
 if ADMIN_MODE:
-    with st.expander("관리자 전용: 데이터/아바타 설정", expanded=False):
-        admin_up = st.file_uploader("멘토 데이터 CSV 업로드", type=["csv"], key="admin_csv")
-        avatar_dir = st.text_input("아바타 디렉터리 경로(선택)", value="")
-        st.caption("예: C:/Users/user/Downloads/결 아바타  또는  ./avatars")
-        if admin_up is not None:
-            mentors_df = pd.read_csv(admin_up)
-        else:
-            mentors_df = load_default_csv()
-        st.session_state["ADMIN_AVATAR_DIR"] = avatar_dir.strip()
+    with st.expander("관리자 전용: 멘토 CSV 업로드", expanded=False):
+        up = st.file_uploader("멘토 데이터 CSV 업로드", type=["csv"])
+        mentors_df = pd.read_csv(up) if up is not None else load_default_csv()
 else:
     mentors_df = load_default_csv()
 
 st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명")
 
-# -----------------------------
-# 폼: 연결 준비 + 아바타 선택
+# =========================
+# 아바타(고정 세트) 로더 — 폴더/루트 모두 스캔 + 파일/디렉터리 안전 처리
+# =========================
 
- st.markdown("### 내 아바타 선택")
+def load_fixed_avatars() -> list[str]:
+    """
+    - avatars가 '폴더'면 해당 폴더의 png/jpg/jpeg/webp 스캔
+    - 폴더가 아니거나 없으면 리포지토리 **루트**에서 동일 확장자 스캔
+    - 두 곳 모두 결과를 합쳐 중복 제거
+    """
+    exts = {".png", ".jpg", ".jpeg", ".webp"}
+    paths: list[str] = []
+
+    av = Path.cwd() / "avatars"
+    if av.exists() and av.is_dir():
+        for p in sorted(av.iterdir()):
+            if p.is_file() and p.suffix.lower() in exts:
+                paths.append(str(p))
+
+    root = Path.cwd()
+    for p in sorted(root.iterdir()):
+        if p.is_file() and p.suffix.lower() in exts:
+            paths.append(str(p))
+
+    # 중복 제거, 순서 유지
+    seen, uniq = set(), []
+    for p in paths:
+        if p not in seen:
+            uniq.append(p)
+            seen.add(p)
+    return uniq
+
+# =========================
+# UI — 2) 연결될 준비
+# =========================
+st.markdown("---")
+st.subheader("2) 연결될 준비")
+
+# ---- 아바타: 폼 바깥 (즉시 반응형) ----
+st.markdown("### 내 아바타 선택")
 avatar_paths = load_fixed_avatars()
-
 if not avatar_paths:
-    st.warning("리포지토리 루트에 PNG/JPG/WEBP 파일이 없습니다. (예: KakaoTalk_...png)")
+    st.warning("루트 또는 avatars/에서 이미지 파일(PNG/JPG/WEBP)을 찾지 못했습니다.")
 else:
-    # 이미지 자체 클릭으로 선택 (썸네일 그리드)
-    captions = [Path(p).name for p in avatar_paths]  # 파일명 라벨
+    captions = [Path(p).name for p in avatar_paths]
     selected_path = image_select(
         label="이미지를 클릭해 선택하세요",
         images=avatar_paths,
         captions=captions,
-        use_container_width=True,   # 그리드 폭에 맞춤
-        return_value="original",    # 원본 값(경로)을 반환
+        use_container_width=True,
+        return_value="original",
         key="avatar_image_select",
     )
-    # 선택 저장 (추천 카드에서 썸네일로 사용)
-    try:
-        with open(selected_path, "rb") as f:
-            st.session_state["selected_avatar_bytes"] = f.read()
-            st.session_state["selected_avatar_name"]  = Path(selected_path).name
-    except Exception:
-        st.warning("선택한 아바타 이미지를 불러오지 못했습니다.")
+    if selected_path:
+        try:
+            with open(selected_path, "rb") as f:
+                st.session_state["selected_avatar_bytes"] = f.read()
+                st.session_state["selected_avatar_name"]  = Path(selected_path).name
+        except Exception:
+            st.warning("선택한 아바타 이미지를 불러오지 못했습니다.")
 
+# ---- 설문 입력: 폼 안 (Submit 버튼 필수) ----
+with st.form("mentee_form"):
+    name     = st.text_input("이름", value="")
+    gender   = st.radio("성별", GENDERS, horizontal=True, index=0)
+    age_band = st.selectbox("나이대", AGE_BANDS, index=0)
 
     st.markdown("### 소통 선호")
     comm_modes = st.multiselect("선호하는 소통 방법(복수)", COMM_MODES, default=["일반 채팅"])
     time_slots = st.multiselect("소통 가능한 시간대(복수)", TIME_SLOTS, default=["오후", "저녁"])
-    days = st.multiselect("소통 가능한 요일(복수)", DAYS, default=["화", "목"])
+    days       = st.multiselect("소통 가능한 요일(복수)", DAYS,       default=["화", "목"])
 
     style = st.selectbox(
         "소통 스타일 — 평소 대화 시 본인과 비슷한 유형",
@@ -291,23 +288,24 @@ else:
 냉철한 조언자형: 논리·문제 해결""",
     )
 
-    # 관심사·목적·선호 멘토
     st.markdown("### 관심사·취향")
     interests = []
     for grp, items in INTERESTS.items():
         interests.extend(st.multiselect(f"{grp}", items, default=[]))
 
     st.markdown("### 멘토링 목적·주제")
-    PURPOSES = ["진로 / 커리어 조언", "학업 / 전문지식 조언", "사회, 인생 경험 공유", "정서적 지지와 대화"]
-    TOPIC_PREFS = ["진로·직업", "학업·전문 지식", "인생 경험·삶의 가치관", "대중문화·취미", "사회 문제·시사", "건강·웰빙"]
-    purpose = st.multiselect("멘토링을 통해 얻고 싶은 것(복수)", PURPOSES, default=["진로 / 커리어 조언", "학업 / 전문지식 조언"])
-    topics = st.multiselect("주로 이야기하고 싶은 주제(복수)", TOPIC_PREFS, default=["진로·직업", "학업·전문 지식"])
+    purpose = st.multiselect("멘토링을 통해 얻고 싶은 것(복수)", PURPOSES,
+                             default=["진로 / 커리어 조언", "학업 / 전문지식 조언"])
+    topics  = st.multiselect("주로 이야기하고 싶은 주제(복수)", TOPIC_PREFS,
+                             default=["진로·직업", "학업·전문 지식"])
 
     st.markdown("### 희망 멘토 정보")
-    wanted_majors = st.multiselect("관심 멘토 직군(복수)", OCCUPATION_MAJORS, default=["연구개발/ IT", "교육", "법률/행정"])
+    wanted_majors      = st.multiselect("관심 멘토 직군(복수)", OCCUPATION_MAJORS,
+                                        default=["연구개발/ IT", "교육", "법률/행정"])
     wanted_mentor_ages = st.multiselect("멘토 선호 나이대(선택)", AGE_BANDS, default=[])
 
-    note = st.text_area("한 줄 요청사항(선택, 100자 이내)", max_chars=120, placeholder="예: 데이터 분석 직무 이직 준비 중, 포트폴리오 피드백 받고 싶어요")
+    note = st.text_area("한 줄 요청사항(선택, 100자 이내)", max_chars=120,
+                        placeholder="예: 데이터 분석 직무 이직 준비 중, 포트폴리오 피드백 받고 싶어요")
 
     submitted = st.form_submit_button("추천 멘토 보기", use_container_width=True)
 
@@ -315,14 +313,14 @@ if not submitted:
     st.info("왼쪽 설문을 입력하고 '추천 멘토 보기'를 눌러주세요.")
     st.stop()
 
-# -----------------------------
-# 매칭 계산 & 결과 표시
-# -----------------------------
+# =========================
+# 매칭 & 결과
+# =========================
 if mentors_df is None or mentors_df.empty:
     st.error("멘토 데이터가 없습니다. (?admin=1에서 CSV 업로드 또는 기본 CSV 배치)")
     st.stop()
 
-mentee_payload = {
+mentee = {
     "name": (name or "").strip(),
     "gender": gender,
     "age_band": age_band,
@@ -340,7 +338,7 @@ mentee_payload = {
 
 scores = []
 for idx, row in mentors_df.iterrows():
-    s = compute_score(mentee_payload, row)
+    s = compute_score(mentee, row)
     scores.append({"idx": idx, "name": row.get("name", ""), **s})
 
 ranked = sorted(scores, key=lambda x: x["total"], reverse=True)[:5]
@@ -356,18 +354,18 @@ for i, item in enumerate(ranked, start=1):
     r = mentors_df.loc[item["idx"]]
     with st.container(border=True):
         st.markdown(f"### #{i}. {r.get('name','(이름없음)')} · {str(r.get('occupation_major','')).strip()} · {str(r.get('age_band','')).strip()}")
-        if 'selected_avatar_bytes' in st.session_state:
-            st.image(st.session_state['selected_avatar_bytes'], width=96)
+        if "selected_avatar_bytes" in st.session_state:
+            st.image(st.session_state["selected_avatar_bytes"], width=96)
         cols = st.columns(3)
         with cols[0]:
             bd = item["breakdown"]
             st.write(f"**총점**: {item['total']}점")
-            st.write("- 목적·주제:", bd['목적·주제'])
-            st.write("- 소통 선호:", bd['소통 선호'])
-            st.write("- 관심사/성향:", bd['관심사/성향'])
-            st.write("- 멘토 적합도:", bd['멘토 적합도'])
-            st.write("- 텍스트:", bd['텍스트'])
-            st.write("- 스타일:", bd['스타일'])
+            st.write("- 목적·주제:", bd["목적·주제"])
+            st.write("- 소통 선호:", bd["소통 선호"])
+            st.write("- 관심사/성향:", bd["관심사/성향"])
+            st.write("- 멘토 적합도:", bd["멘토 적합도"])
+            st.write("- 텍스트:", bd["텍스트"])
+            st.write("- 스타일:", bd["스타일"])
         with cols[1]:
             st.write("**소통 가능**")
             st.write("방법:", r.get("comm_modes", "-"))
@@ -382,21 +380,20 @@ for i, item in enumerate(ranked, start=1):
         with st.expander("멘토 소개 보기"):
             st.write(r.get("intro", ""))
 
-# 결과 다운로드 (CSV)
+# 다운로드
 export_cols = [
     "name", "gender", "age_band", "occupation_major", "occupation_minor",
     "comm_modes", "comm_time", "comm_days", "style", "interests",
-    "purpose", "topic_prefs", "intro"
+    "purpose", "topic_prefs", "intro",
 ]
 rec_df = mentors_df.loc[[x["idx"] for x in ranked], export_cols]
-rec_buf = io.StringIO(); rec_df.to_csv(rec_buf, index=False)
-
+buf = io.StringIO(); rec_df.to_csv(buf, index=False, encoding="utf-8")
 st.download_button(
-    label="추천 결과 5명 CSV 다운로드",
-    data=rec_buf.getvalue().encode("utf-8-sig"),
+    "추천 결과 5명 CSV 다운로드",
+    data=buf.getvalue().encode("utf-8-sig"),
     file_name="gyeol_recommended_mentors.csv",
     mime="text/csv",
     use_container_width=True,
 )
 
-st.caption("※ 본 데모는 설명 가능한 규칙 + 경량 텍스트 유사도를 사용합니다. 가중치 조정 및 유사군 확장은 코드 상단 상수에서 쉽게 변경 가능합니다.")
+st.caption("※ 규칙 기반 + 경량 텍스트 유사도 점수 조합. 가중치/보완쌍은 상단 상수에서 쉽게 조정 가능합니다.")
