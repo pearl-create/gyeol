@@ -198,7 +198,24 @@ else:
 
 st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명")
 
+# =========================
+# 아바타(고정 세트) 로더
+# =========================
+def load_fixed_avatars() -> list[str]:
+    """
+    ./avatars, /app/avatars, /mnt/data/avatars 폴더에서 png/jpg/webp를 자동 스캔
+    """
+    roots = [Path.cwd() / "avatars", Path("/app/avatars"), Path("/mnt/data/avatars")]
+    exts = {".png", ".jpg", ".jpeg", ".webp"}
+    paths: list[str] = []
+    for r in roots:
+        if r.exists():
+            for p in sorted(r.iterdir()):
+                if p.suffix.lower() in exts:
+                    paths.append(str(p))
+    return paths
 
+# =========================
 # UI — 2) 연결될 준비
 # =========================
 st.markdown("---")
