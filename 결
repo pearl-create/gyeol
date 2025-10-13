@@ -228,7 +228,7 @@ with st.form("mentee_form"):
 
     # ---- 아바타: 게임 스킨처럼 버튼으로 선택 ----
     st.markdown("### 내 아바타 선택")
-    avatar_paths = load_fixed_avatars()
+    avatar_paths = avatars/()
     if not avatar_paths:
         st.warning("아바타 고정 세트를 찾을 수 없습니다. 리포지토리 루트에 avatars/ 폴더를 만들고 이미지를 넣어주세요.")
     else:
