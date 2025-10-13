@@ -73,7 +73,7 @@ div[data-testid="stLinkButton"] > a {
   display: inline-block !important;
   width: min(85vw, 600px) !important;    /* 로고 폭에 자동 맞춤 */
   padding: 3.2rem 2.2rem !important;     /* 버튼 높이 */
-  font-size: 2.8rem !important;          /* 로고 크기에 비례한 폰트 */
+  font-size: 10rem !important;          /* 로고 크기에 비례한 폰트 */
   font-weight: 900 !important;
   border-radius: 2rem !important;
   color: #fff !important;
