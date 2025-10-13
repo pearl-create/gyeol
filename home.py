@@ -133,3 +133,58 @@ st.link_button("🧑‍🎓 멘티 버전으로 이동", MENTEE_URL)
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+/* ===== 배경: AI 감성 그라데이션 ===== */
+.stApp, [data-testid="stAppViewContainer"] {
+  background: radial-gradient(circle at 20% 30%, #E9ECF8 0%, #F3F6FA 25%, #C7D2F0 65%, #A9B6E6 100%) !important;
+  background-attachment: fixed !important;
+}
+
+/* ===== 화면 정중앙 정렬 ===== */
+[data-testid="stAppViewContainer"] > .main {
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+  justify-content: center;  /* 세로 중앙 */
+  align-items: center;      /* 가로 중앙 */
+  text-align: center;
+}
+
+/* ===== 부제(슬로건) 크게 ===== */
+.subtitle{
+  font-size: 3rem !important;
+  font-weight: 800 !important;
+  color: #0F1A3C !important;
+  text-shadow: 0 2px 8px rgba(255,255,255,0.8);
+  margin: 0 0 4rem 0 !important;
+}
+
+/* ====== 핵심: st.link_button 진짜 왕버튼로 ====== */
+div[data-testid="stLinkButton"] > a {
+  display: block !important;
+  width: min(95vw, 900px) !important;    /* 폭 크게 */
+  padding: 4.5rem 2.5rem !important;     /* 높이 크게 */
+  font-size: 3.6rem !important;          /* 글자 크게 */
+  font-weight: 900 !important;
+  border-radius: 2.8rem !important;
+  color: #fff !important;
+  background: linear-gradient(135deg, #3A4FC4, #667DFF, #9EAFFF) !important;
+  border: none !important;
+  box-shadow: 0 25px 80px rgba(58,79,196,0.40) !important;
+  text-align: center !important;
+  transition: transform .25s ease, box-shadow .25s ease, background .25s ease !important;
+}
+div[data-testid="stLinkButton"] > a:hover {
+  transform: translateY(-10px) scale(1.05);
+  box-shadow: 0 35px 100px rgba(58,79,196,0.55);
+  background: linear-gradient(135deg, #4E65E0, #7C8FFF, #B4C0FF) !important;
+}
+
+/* 모바일 보정 */
+@media (max-width: 480px) {
+  .subtitle { font-size: 2.4rem !important; margin-bottom: 3rem !important; }
+  div[data-testid="stLinkButton"] > a { font-size: 2.6rem !important; padding: 3.2rem 2rem !important; }
+}
+</style>
+""", unsafe_allow_html=True)
