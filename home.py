@@ -36,7 +36,7 @@ def render_logo():
             # 바이트로 읽어 media storage 경로 이슈 회피
             data = p.read_bytes()
             st.markdown('<div class="logo-wrap">', unsafe_allow_html=True)
-            st.image(data, caption=None, use_container_width=False)
+          safe_logo("logo_gyeol.png", width=420)
             st.markdown('</div>', unsafe_allow_html=True)
             return
 
