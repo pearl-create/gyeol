@@ -83,9 +83,9 @@ st.markdown("""
 
 /* 버튼 커스터마이징 */
 .big-btn button, .big-btn a {
-  width: 100% !important;
+  width: 300% !important;
   padding: 1.4rem 1.6rem !important;       /* ↑ padding 확대 */
-  font-size: 1.3rem !important;            /* ↑ 글자 크기 확대 */
+  font-size: 3rem !important;            /* ↑ 글자 크기 확대 */
   border-radius: 1.2rem !important;        /* ↑ 모서리 둥글게 */
   font-weight: 600 !important;
   box-shadow: 0 6px 15px rgba(0,0,0,0.08);
