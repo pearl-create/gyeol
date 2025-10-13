@@ -63,61 +63,109 @@ def render_logo():
     )
 
 render_logo()
-st.markdown('<div class="subtitle"> 청춘과 지혜를 연결하다, <b>결(結)</b></div>', unsafe_allow_html=True)
 
-# ---------------- 버튼 ----------------
-# =============== 큰 세로 버튼 스타일 ===============
+# 폰트 확대 스타일 추가
 st.markdown("""
 <style>
-.main > div { padding-top: 2.5rem; }
-
-@keyframes popIn {
-  0% { transform: scale(.85); opacity: 0; filter: blur(3px); }
-  60% { transform: scale(1.05); opacity: 1; filter: blur(0); }
-  100% { transform: scale(1); }
-}
-
-.logo-wrap { display:flex; justify-content:center; margin-bottom:1.2rem; }
-.logo-wrap img { width:min(300px,60vw); max-width:360px; animation: popIn 900ms cubic-bezier(.2,.9,.2,1) both; }
-
 .subtitle {
-  text-align:center; opacity:.85; margin:.5rem 0 2.2rem;
-  font-size:1.05rem; line-height:1.5;
-}
-
-/* 🔸 버튼 전체 래퍼 */
-.big-btns {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.5rem; /* 버튼 사이 간격 */
-}
-
-/* 🔸 실제 버튼 */
-.big-btn a, .big-btn button {
-  display: inline-block;
-  width: min(90vw, 420px) !important;   /* 모바일에선 거의 전체 폭, PC에선 420px */
-  padding: 1.6rem 1.4rem !important;    /* 🔹 키 포인트: 버튼 높이 */
-  font-size: 1.4rem !important;         /* 🔹 글자 크기 */
-  font-weight: 600 !important;
-  text-align: center !important;
-  border-radius: 1.4rem !important;
-  color: white !important;
-  background: linear-gradient(135deg, #1F2A44, #2E4A7D) !important;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.12);
-  border: none !important;
-  transition: all .25s ease-in-out;
-}
-.big-btn a:hover, .big-btn button:hover {
-  transform: translateY(-5px) scale(1.02);
-  box-shadow: 0 14px 28px rgba(0,0,0,0.18);
-  background: linear-gradient(135deg, #2C3E6B, #3A5B9C) !important;
+  font-size: 2.2rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em;
+  color: rgba(0,0,0,0.85) !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
+st.markdown('<div class="subtitle">청춘과 지혜를 연결하다, <b>결(結)</b></div>', unsafe_allow_html=True)
 
-# =============== 버튼 본문 ===============
+# ---------------- 버튼 ----------------
+# ===================== 초대형 중앙 버튼 버전 =====================
+import streamlit as st
+
+MENTOR_URL = "https://mentor.example.com"
+MENTEE_URL = "https://mentee.example.com"
+
+st.set_page_config(page_title="결(結) — 홈", page_icon="✨", layout="centered", initial_sidebar_state="collapsed")
+
+# ===================== CSS =====================
+st.markdown("""
+<style>
+html, body, [class^="block-container"] {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+.main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;      /* 수직 중앙 정렬 */
+  align-items: center;          /* 수평 중앙 정렬 */
+  height: 90vh;                 /* 거의 전체 화면 높이 */
+}
+
+/* 로고 */
+.logo-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2.5rem;
+  animation: popIn 1s cubic-bezier(.2,.9,.2,1) both;
+}
+@keyframes popIn {
+  0% { transform: scale(0.8); opacity: 0; filter: blur(4px); }
+  60% { transform: scale(1.05); opacity: 1; filter: blur(0); }
+  100% { transform: scale(1); }
+}
+.logo-wrap img {
+  width: min(400px, 70vw);
+  max-width: 420px;
+}
+
+/* 부제 */
+.subtitle {
+  text-align:center;
+  font-size: 1.4rem;
+  margin-bottom: 3rem;
+  color: rgba(0,0,0,0.75);
+}
+
+/* 버튼 전체 */
+.big-btns {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem; /* 버튼 간 간격 */
+}
+
+/* 🔹 초대형 버튼 스타일 */
+.big-btn a, .big-btn button {
+  display: inline-block;
+  width: min(90vw, 520px) !important;   /* 폭 크게 */
+  padding: 2.2rem 1.8rem !important;    /* 높이 크게 */
+  font-size: 1.8rem !important;         /* 글자 매우 큼 */
+  font-weight: 700 !important;
+  border-radius: 1.8rem !important;
+  color: white !important;
+  background: linear-gradient(135deg, #1C2947, #2F4E8A) !important;
+  box-shadow: 0 14px 32px rgba(0,0,0,0.15);
+  border: none !important;
+  transition: all .3s ease;
+  text-align: center;
+}
+.big-btn a:hover, .big-btn button:hover {
+  transform: translateY(-7px) scale(1.03);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  background: linear-gradient(135deg, #2A3E6A, #3F64B5) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ===================== 본문 =====================
+st.markdown('<div class="logo-wrap">', unsafe_allow_html=True)
+st.image("assets/logo_gyeol.png", use_container_width=False)
+st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown('<div class="subtitle">멘토-멘티가 서로를 찾는 가장 따뜻한 방법,<br><b>결(結)</b></div>', unsafe_allow_html=True)
+
 st.markdown('<div class="big-btns">', unsafe_allow_html=True)
 
 st.markdown('<div class="big-btn">', unsafe_allow_html=True)
