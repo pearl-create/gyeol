@@ -26,9 +26,9 @@ def render_logo():
     """로고를 안전하게 렌더링(경로 문제 방지). 없으면 SVG 대체."""
     base = Path(__file__).resolve().parent
     candidates = [
-        base / "assets" / "logo_gyeol.png",
-        base / "static" / "logo_gyeol.png",
-        base.parent / "assets" / "logo_gyeol.png",  # /gyeol/assets/...
+        base / "assets" / "logo_gyeol.jpg",
+        base / "static" / "logo_gyeol.jpg",
+        base.parent / "assets" / "logo_gyeol.jpg",  # /gyeol/assets/...
         Path("assets/logo_gyeol.png"),               # 혹시모를 CWD 기준
     ]
     for p in candidates:
@@ -75,6 +75,3 @@ with c2:
     st.markdown('<div class="big-btn">', unsafe_allow_html=True)
     st.link_button("🧑‍🎓 멘티 버전으로 이동", MENTEE_URL)
     st.markdown('</div>', unsafe_allow_html=True)
-
-st.write("")
-st.caption("Tip: 멘토/멘티는 각각 별도 URL로 배포해 두면 전환이 깔끔해요.")
