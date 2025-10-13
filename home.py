@@ -1,4 +1,4 @@
-# home.py — 결(結) 랜딩 (AI 감성 배경 + 초거대 중앙 버튼)
+# home.py — 결(結) 랜딩 / AI 오로라 배경 + 로고 폭에 맞는 초대형 버튼
 from pathlib import Path
 import streamlit as st
 
@@ -10,91 +10,98 @@ st.set_page_config(page_title="결(結) — Home", page_icon="✨", layout="cent
 # ===================== CSS =====================
 st.markdown("""
 <style>
-/* 🪶 배경: AI 감성 (은은한 그라데이션 + 빛 효과) */
-html, body, [class^="block-container"] {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  background: radial-gradient(circle at 20% 30%, #E9ECF8 0%, #F3F6FA 25%, #C7D2F0 65%, #A9B6E6 100%);
-  background-attachment: fixed;
-  color: #1a1a1a;
+/* ===== ✨ AI 오로라 배경 ===== */
+.stApp, [data-testid="stAppViewContainer"] {
+  background: radial-gradient(circle at 30% 30%, #14193F, #1B1F4B 25%, #10142C 60%, #080A1A 100%);
+  background-size: 200% 200%;
+  animation: aurora 12s ease-in-out infinite alternate;
+  color: #fff;
+}
+@keyframes aurora {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
-/* 중앙 정렬 */
-.main {
+/* ===== 화면 정중앙 정렬 ===== */
+[data-testid="stAppViewContainer"] > .main {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  justify-content: center;   /* 세로 중앙 */
-  align-items: center;       /* 가로 중앙 */
-  height: 100vh;             /* 화면 전체 높이 */
+  justify-content: center; /* 수직 중앙 */
+  align-items: center;     /* 수평 중앙 */
   text-align: center;
 }
 
-/* 로고 애니메이션 */
-@keyframes popIn {
-  0% { transform: scale(0.8); opacity: 0; filter: blur(5px); }
-  60% { transform: scale(1.05); opacity: 1; filter: blur(0); }
-  100% { transform: scale(1); }
-}
+/* ===== 로고 ===== */
 .logo-wrap {
   display: flex;
   justify-content: center;
   margin-bottom: 3rem;
-  animation: popIn 1s cubic-bezier(.2,.9,.2,1) both;
+  animation: popIn 1s ease-out both;
+}
+@keyframes popIn {
+  0% { transform: scale(0.8); opacity: 0; filter: blur(6px); }
+  60% { transform: scale(1.05); opacity: 1; filter: blur(0); }
+  100% { transform: scale(1); }
 }
 .logo-wrap img {
-  width: min(600px, 85vw);
-  max-width: 700px;
+  width: min(600px, 85vw);     /* 로고 폭 */
+  max-width: 680px;            /* 최대 폭 */
 }
 
-/* 부제 */
+/* ===== 부제 (슬로건) ===== */
 .subtitle {
   font-size: 3rem;
   font-weight: 800;
-  color: #0F1A3C;
-  text-shadow: 0 2px 8px rgba(255,255,255,0.8);
+  color: #DDE4FF;
+  text-shadow: 0 4px 16px rgba(90,130,255,0.5);
   margin-bottom: 4rem;
   line-height: 1.5;
 }
 
-/* 버튼 전체 */
+/* ===== 버튼 그룹 ===== */
 .big-btns {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3rem;
+  gap: 2.4rem;
 }
 
-/* 🔹 초거대 버튼 */
-.big-btn a, .big-btn button {
-  display: inline-block;
-  width: min(95vw, 900px) !important;    /* 🔸 폭 크게 */
-  padding: 4.5rem 2.5rem !important;     /* 🔸 높이도 3배로 */
-  font-size: 3.6rem !important;          /* 🔸 글자 크기도 대폭 확대 */
+/* ===== st.link_button 왕버튼 ===== */
+div[data-testid="stLinkButton"] > a {
+  display: inline-block !important;
+  width: min(85vw, 600px) !important;    /* 로고 폭에 자동 맞춤 */
+  padding: 3.2rem 2.2rem !important;     /* 버튼 높이 */
+  font-size: 2.8rem !important;          /* 로고 크기에 비례한 폰트 */
   font-weight: 900 !important;
-  border-radius: 2.8rem !important;
-  color: white !important;
-  background: linear-gradient(135deg, #3A4FC4, #667DFF, #9EAFFF) !important;
+  border-radius: 2rem !important;
+  color: #fff !important;
+  text-align: center !important;
+  background: linear-gradient(135deg, #5161E8, #7C8FFF, #A5B3FF) !important;
   border: none !important;
-  box-shadow: 0 25px 80px rgba(58, 79, 196, 0.4);
-  text-align: center;
-  transition: all 0.3s ease-in-out;
+  box-shadow: 0 20px 60px rgba(80,100,255,0.45) !important;
+  transition: all .35s ease-in-out !important;
 }
-.big-btn a:hover, .big-btn button:hover {
-  transform: translateY(-10px) scale(1.05);
-  box-shadow: 0 35px 100px rgba(58, 79, 196, 0.55);
-  background: linear-gradient(135deg, #4E65E0, #7C8FFF, #B4C0FF) !important;
+div[data-testid="stLinkButton"] > a:hover {
+  transform: translateY(-10px) scale(1.04);
+  box-shadow: 0 30px 90px rgba(80,100,255,0.6) !important;
+  background: linear-gradient(135deg, #8CA3FF, #B5C3FF, #C6D0FF) !important;
 }
 
-/* 반응형 (모바일) */
+/* ===== 모바일 반응형 ===== */
 @media (max-width: 480px) {
-  .subtitle { font-size: 2.2rem; margin-bottom: 3rem; }
-  .big-btn a, .big-btn button { font-size: 2.4rem !important; padding: 3.2rem 2rem !important; }
+  .subtitle { font-size: 2.2rem; margin-bottom: 2.5rem; }
+  div[data-testid="stLinkButton"] > a {
+    font-size: 2.0rem !important;
+    padding: 2.4rem 1.6rem !important;
+    width: 90vw !important;
+  }
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ===================== 로고 로더 =====================
+# ===================== 로고 렌더 =====================
 def render_logo(width_px: int = 600):
     base = Path(__file__).resolve().parent
     for name in ["logo_gyeol.jpg", "logo_gyeol.png"]:
@@ -104,12 +111,11 @@ def render_logo(width_px: int = 600):
             st.image(p.read_bytes(), use_container_width=False)
             st.markdown('</div>', unsafe_allow_html=True)
             return
-    # 대체 텍스트 로고
     st.markdown(f"""
     <div class="logo-wrap">
       <svg width="{width_px}" height="{int(width_px*0.25)}" viewBox="0 0 640 180" xmlns="http://www.w3.org/2000/svg">
-        <text x="0" y="100" fill="#3A4FC4" style="font: 900 100px 'Pretendard', sans-serif;">결</text>
-        <text x="130" y="100" fill="#3A4FC4" style="font: 700 48px 'Pretendard', sans-serif;">Mentor–Mentee</text>
+        <text x="0" y="100" fill="#9DAEFF" style="font: 900 100px 'Pretendard', sans-serif;">결</text>
+        <text x="130" y="100" fill="#C9D4FF" style="font: 700 48px 'Pretendard', sans-serif;">Mentor–Mentee</text>
       </svg>
     </div>
     """, unsafe_allow_html=True)
@@ -118,73 +124,13 @@ def render_logo(width_px: int = 600):
 render_logo()
 
 st.markdown(
-    '<div class="subtitle">청춘과 지혜를 연결하다,<br><b style="color:#3A4FC4;">결(結)</b></div>',
+    '<div class="subtitle">청춘과 지혜를 연결하다,<br><b style="color:#AEBBFF;">결(結)</b></div>',
     unsafe_allow_html=True
 )
 
 st.markdown('<div class="big-btns">', unsafe_allow_html=True)
 
-st.markdown('<div class="big-btn">', unsafe_allow_html=True)
 st.link_button("👩‍🏫 멘토 버전으로 이동", MENTOR_URL)
-st.markdown('</div>', unsafe_allow_html=True)
-
-st.markdown('<div class="big-btn">', unsafe_allow_html=True)
 st.link_button("🧑‍🎓 멘티 버전으로 이동", MENTEE_URL)
-st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
-
-st.markdown("""
-<style>
-/* ===== 배경: AI 감성 그라데이션 ===== */
-.stApp, [data-testid="stAppViewContainer"] {
-  background: radial-gradient(circle at 20% 30%, #E9ECF8 0%, #F3F6FA 25%, #C7D2F0 65%, #A9B6E6 100%) !important;
-  background-attachment: fixed !important;
-}
-
-/* ===== 화면 정중앙 정렬 ===== */
-[data-testid="stAppViewContainer"] > .main {
-  min-height: 100vh;
-  display: flex; flex-direction: column;
-  justify-content: center;  /* 세로 중앙 */
-  align-items: center;      /* 가로 중앙 */
-  text-align: center;
-}
-
-/* ===== 부제(슬로건) 크게 ===== */
-.subtitle{
-  font-size: 3rem !important;
-  font-weight: 800 !important;
-  color: #0F1A3C !important;
-  text-shadow: 0 2px 8px rgba(255,255,255,0.8);
-  margin: 0 0 4rem 0 !important;
-}
-
-/* ====== 핵심: st.link_button 진짜 왕버튼로 ====== */
-div[data-testid="stLinkButton"] > a {
-  display: block !important;
-  width: min(95vw, 900px) !important;    /* 폭 크게 */
-  padding: 4.5rem 2.5rem !important;     /* 높이 크게 */
-  font-size: 3.6rem !important;          /* 글자 크게 */
-  font-weight: 900 !important;
-  border-radius: 2.8rem !important;
-  color: #fff !important;
-  background: linear-gradient(135deg, #3A4FC4, #667DFF, #9EAFFF) !important;
-  border: none !important;
-  box-shadow: 0 25px 80px rgba(58,79,196,0.40) !important;
-  text-align: center !important;
-  transition: transform .25s ease, box-shadow .25s ease, background .25s ease !important;
-}
-div[data-testid="stLinkButton"] > a:hover {
-  transform: translateY(-10px) scale(1.05);
-  box-shadow: 0 35px 100px rgba(58,79,196,0.55);
-  background: linear-gradient(135deg, #4E65E0, #7C8FFF, #B4C0FF) !important;
-}
-
-/* 모바일 보정 */
-@media (max-width: 480px) {
-  .subtitle { font-size: 2.4rem !important; margin-bottom: 3rem !important; }
-  div[data-testid="stLinkButton"] > a { font-size: 2.6rem !important; padding: 3.2rem 2rem !important; }
-}
-</style>
-""", unsafe_allow_html=True)
