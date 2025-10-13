@@ -26,10 +26,10 @@ def render_logo():
     """로고를 안전하게 렌더링(경로 문제 방지). 없으면 SVG 대체."""
     base = Path(__file__).resolve().parent
     candidates = [
-        base / "assets" / "logo_gyeol.jpg",
-        base / "static" / "logo_gyeol.jpg",
-        base.parent / "assets" / "logo_gyeol.jpg",  # /gyeol/assets/...
-        Path("assets/logo_gyeol.png"),               # 혹시모를 CWD 기준
+        base / "logo_gyeol.jpg",
+        base /"logo_gyeol.jpg",
+        base.parent / "logo_gyeol.jpg",  # /gyeol/assets/...
+        Path("logo_gyeol.png"),               # 혹시모를 CWD 기준
     ]
     for p in candidates:
         if p.is_file():
