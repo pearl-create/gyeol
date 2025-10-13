@@ -1,19 +1,16 @@
 # app.py
 # -*- coding: utf-8 -*-
 """
-결(結) — 멘티 전용 박람회 체험용 매칭 데모 앱 (전체 반영판)
+결(結) — 멘티 전용 박람회 체험용 매칭 데모 앱 (수정 반영판)
 
-수정 요약
-- 아바타 선택을 **폼 바깥**으로 이동하여 Missing Submit Button 경고 해결
-- `streamlit-image-select`로 **이미지 자체 클릭** 선택 UX 적용
-- `load_fixed_avatars()`가 `avatars`가 파일일 때 발생하던 **NotADirectoryError** 방지
-  (폴더 여부 `is_dir()` 검사 + 리포지토리 **루트**에서도 이미지 스캔)
-- `st.experimental_get_query_params` → **`st.query_params`** 사용
-- 스타일 도움말 문자열을 **삼중 따옴표**로 안전 처리
+변경 요약
+1) CSV 파일명: '멘토더미.csv' 사용 (CWD와 /mnt/data에서 탐색)
+2) 아바타 선택: 파일명/캡션 숨김 (이미지 클릭만으로 선택)
+3) UI: 전문적인 커스텀 테마(CSS) 적용 — 그라데이션 배경, 카드/버튼/태그 스타일
 
 실행
-- Streamlit Cloud 또는 로컬: `streamlit run app.py`
-- (권장) requirements.txt에 `streamlit-image-select==0.6.0` 추가 필요
+- streamlit run app.py
+- (권장) requirements.txt: streamlit-image-select==0.6.0
 """
 
 import io
@@ -70,6 +67,83 @@ SIMILAR_MAJORS = {
     ("운송/기계", "운송 관리"),
     ("행정관리", "일반 사무"),
 }
+
+# =========================
+# 스타일: 전문 테마 적용
+# =========================
+def inject_pro_style():
+    st.markdown("""
+    <style>
+    /* 배경 (은은한 그라데이션) */
+    [data-testid="stAppViewContainer"] {
+        background: radial-gradient(1200px 800px at 20% 0%, #f7fbff 0%, #eef3f9 40%, #e9eef6 70%, #e8ecf4 100%);
+    }
+    /* 사이드/헤더 크롬 톤 통일 */
+    [data-testid="stHeader"] { background: transparent; }
+    [data-testid="stSidebar"] { background: rgba(255,255,255,0.7) !important; }
+
+    /* 카드 느낌 컨테이너 */
+    .stContainer, .stMarkdown, .stDataFrame {
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 4rem;
+        max-width: 880px;
+    }
+    /* 기본 카드 테두리 */
+    div[role="group"] > div, .stExpander, .stTabs, .stAlert {
+        border-radius: 16px !important;
+    }
+    .st-emotion-cache-1r4qj8v, .st-emotion-cache-1r6slb0, .st-emotion-cache-1r6slb0, .st-emotion-cache-1jicfl2 {
+        border-radius: 16px !important;
+        box-shadow: 0 8px 24px rgba(28, 51, 84, 0.10);
+        background: rgba(255,255,255, 0.72);
+        backdrop-filter: blur(6px);
+    }
+    /* 버튼 (프라이머리) */
+    .stButton > button {
+        border-radius: 12px;
+        padding: 0.7rem 1rem;
+        font-weight: 600;
+        border: 1px solid rgba(28,51,84,0.12);
+        background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+        color: #fff;
+        box-shadow: 0 8px 16px rgba(37, 99, 235, 0.25);
+    }
+    .stButton > button:hover { filter: brightness(1.04); }
+    .stDownloadButton > button {
+        border-radius: 12px;
+        padding: 0.6rem 0.9rem;
+        font-weight: 600;
+        border: 1px solid rgba(28,51,84,0.12);
+        background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+        color: #fff;
+        box-shadow: 0 8px 16px rgba(2, 132, 199, 0.22);
+    }
+    /* 멘토 카드 내부 타이포 */
+    .mentor-card h3 { margin-bottom: 0.25rem; }
+    .tag {
+        display: inline-block; margin: 0 6px 6px 0; padding: 4px 10px;
+        border-radius: 999px; background: #eef2ff; color: #3730a3; font-weight: 600; font-size: 12.5px;
+        border: 1px solid rgba(55,48,163,0.15);
+    }
+    /* image-select 캡션 숨김 */
+    .image-select__caption { display: none !important; }
+    .image-select__container { gap: 12px; }
+    .image-select__image { border-radius: 14px !important; }
+    /* 선택된 아바타 강조(글로우) */
+    .image-select__image--selected {
+        box-shadow: 0 0 0 3px #60a5fa, 0 10px 24px rgba(96,165,250,.35) !important;
+        transform: translateY(-1px);
+    }
+    /* 소제목 스타일 */
+    h2, h3 { letter-spacing: -0.2px; }
+    /* 푸터/메뉴 미니멀 */
+    footer { visibility: hidden; height: 0; }
+    #MainMenu { visibility: hidden; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # =========================
 # 유틸
@@ -168,19 +242,30 @@ def compute_score(mentee: Dict, mentor_row: pd.Series) -> Dict:
     }}
 
 # =========================
-# 데이터 로딩
+# 페이지 / 스타일
 # =========================
 st.set_page_config(page_title="결 — 멘토 추천 데모", page_icon="🤝", layout="centered")
+inject_pro_style()
 st.title("결 — 멘토 추천 체험(멘티 전용)")
 st.caption("입력 데이터는 체험 종료 시 삭제됩니다. QR/다운로드 저장을 선택하지 않는 한 서버에 남지 않습니다.")
 
+# =========================
+# 데이터 로딩
+# =========================
 @st.cache_data(show_spinner=False)
 def load_default_csv() -> pd.DataFrame:
-    for p in ["gyeol_dummy_mentors_20.csv", "/mnt/data/gyeol_dummy_mentors_20.csv"]:
+    """
+    1순위: ./멘토더미.csv
+    2순위: /mnt/data/멘토더미.csv
+    """
+    for p in ["멘토더미.csv", "/mnt/data/멘토더미.csv"]:
         try:
-            return pd.read_csv(p)
+            return pd.read_csv(p, encoding="utf-8-sig")
         except Exception:
-            pass
+            try:
+                return pd.read_csv(p)  # fallback
+            except Exception:
+                pass
     # 최소 더미 1명
     return pd.DataFrame([{
         "name":"김샘","gender":"남","age_band":"만 40세~49세","occupation_major":"교육",
@@ -208,7 +293,6 @@ st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명")
 # =========================
 # 아바타(고정 세트) 로더 — 폴더/루트 모두 스캔 + 파일/디렉터리 안전 처리
 # =========================
-
 def load_fixed_avatars() -> list[str]:
     """
     - avatars가 '폴더'면 해당 폴더의 png/jpg/jpeg/webp 스캔
@@ -249,11 +333,11 @@ avatar_paths = load_fixed_avatars()
 if not avatar_paths:
     st.warning("루트 또는 avatars/에서 이미지 파일(PNG/JPG/WEBP)을 찾지 못했습니다.")
 else:
-    captions = [Path(p).name for p in avatar_paths]
+    # 파일명/캡션 숨김: captions=None, label="" 설정
     selected_path = image_select(
-        label="이미지를 클릭해 선택하세요",
+        label="",
         images=avatar_paths,
-        captions=captions,
+        captions=None,                  # ← 파일명 표시 안 함
         use_container_width=True,
         return_value="original",
         key="avatar_image_select",
@@ -262,7 +346,7 @@ else:
         try:
             with open(selected_path, "rb") as f:
                 st.session_state["selected_avatar_bytes"] = f.read()
-                st.session_state["selected_avatar_name"]  = Path(selected_path).name
+                st.session_state["selected_avatar_name"]  = Path(selected_path).name  # 저장만, 화면엔 표시 안 함
         except Exception:
             st.warning("선택한 아바타 이미지를 불러오지 못했습니다.")
 
@@ -353,7 +437,8 @@ if not ranked:
 for i, item in enumerate(ranked, start=1):
     r = mentors_df.loc[item["idx"]]
     with st.container(border=True):
-        st.markdown(f"### #{i}. {r.get('name','(이름없음)')} · {str(r.get('occupation_major','')).strip()} · {str(r.get('age_band','')).strip()}")
+        st.markdown(f"<div class='mentor-card'><h3>#{i}. {r.get('name','(이름없음)')}</h3></div>", unsafe_allow_html=True)
+        st.write(f"**직군**: {str(r.get('occupation_major','')).strip()} · **나이대**: {str(r.get('age_band','')).strip()}")
         if "selected_avatar_bytes" in st.session_state:
             st.image(st.session_state["selected_avatar_bytes"], width=96)
         cols = st.columns(3)
