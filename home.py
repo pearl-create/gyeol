@@ -134,3 +134,42 @@ st.link_button("👩‍🏫 멘토 버전으로 이동", MENTOR_URL)
 st.link_button("🧑‍🎓 멘티 버전으로 이동", MENTEE_URL)
 
 st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+/* 🔹 Streamlit 내부 버튼 구조 직접 타겟 */
+div[data-testid="stLinkButton"] a, 
+div[data-testid="stLinkButton"] a span,
+div[data-testid="stButton"] button, 
+div[data-testid="stButton"] button span {
+  font-size: 3rem !important;         /* 🔸 진짜로 커짐 */
+  font-weight: 900 !important;
+  letter-spacing: -0.02em;
+  color: white !important;
+}
+
+/* 🔹 버튼 전체 */
+div[data-testid="stLinkButton"] > a {
+  width: min(85vw, 600px) !important; 
+  padding: 3.5rem 2.5rem !important;   /* 높이 크게 */
+  border-radius: 2rem !important;
+  background: linear-gradient(135deg, #5161E8, #7C8FFF, #A5B3FF) !important;
+  box-shadow: 0 20px 60px rgba(80,100,255,0.45) !important;
+  transition: all .35s ease-in-out !important;
+}
+div[data-testid="stLinkButton"] > a:hover {
+  transform: translateY(-10px) scale(1.04);
+  box-shadow: 0 30px 90px rgba(80,100,255,0.6) !important;
+  background: linear-gradient(135deg, #8CA3FF, #B5C3FF, #C6D0FF) !important;
+}
+
+/* 🔹 모바일 대응 */
+@media (max-width: 480px) {
+  div[data-testid="stLinkButton"] a,
+  div[data-testid="stLinkButton"] a span {
+    font-size: 2.2rem !important;
+  }
+}
+</style>
+""", unsafe_allow_html=True)
+
