@@ -2,10 +2,10 @@
 from pathlib import Path
 import streamlit as st
 
-MENTOR_URL = "https://mentor.example.com"
-MENTEE_URL = "https://mentee.example.com"
+MENTOR_URL = "https://www.youtube.com/watch?v=Ov9AqrQW-Pk"
+MENTEE_URL = "https://37mokmtxhvt8uxwgdamw7y.streamlit.app/"
 
-st.set_page_config(page_title="결(結) — 홈", page_icon="✨", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="결 Home", page_icon="✨", layout="centered", initial_sidebar_state="collapsed")
 
 # ---------------- 스타일 & 애니메이션 ----------------
 st.markdown("""
