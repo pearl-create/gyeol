@@ -66,50 +66,66 @@ render_logo()
 st.markdown('<div class="subtitle"> 청춘과 지혜를 연결하다, <b>결(結)</b></div>', unsafe_allow_html=True)
 
 # ---------------- 버튼 ----------------
+# =============== 큰 세로 버튼 스타일 ===============
 st.markdown("""
 <style>
 .main > div { padding-top: 2.5rem; }
 
 @keyframes popIn {
-  0% { transform: scale(.85); opacity: 0; filter: blur(3px) }
-  60% { transform: scale(1.05); opacity: 1; filter: blur(0) }
-  100% { transform: scale(1) }
+  0% { transform: scale(.85); opacity: 0; filter: blur(3px); }
+  60% { transform: scale(1.05); opacity: 1; filter: blur(0); }
+  100% { transform: scale(1); }
 }
 
-.logo-wrap { display:flex; justify-content:center; margin-bottom:1rem; }
-.logo-wrap img { width:min(300px,60vw); max-width:340px; animation: popIn 900ms cubic-bezier(.2,.9,.2,1) both; }
+.logo-wrap { display:flex; justify-content:center; margin-bottom:1.2rem; }
+.logo-wrap img { width:min(300px,60vw); max-width:360px; animation: popIn 900ms cubic-bezier(.2,.9,.2,1) both; }
 
-.subtitle { text-align:center; opacity:.85; margin:.25rem 0 2rem; font-size:1.05rem; }
+.subtitle {
+  text-align:center; opacity:.85; margin:.5rem 0 2.2rem;
+  font-size:1.05rem; line-height:1.5;
+}
 
-/* 버튼 커스터마이징 */
-.big-btn button, .big-btn a {
-  width: 600% !important;
-  padding: 1.4rem 1.6rem !important;       /* ↑ padding 확대 */
-  font-size: 6rem !important;            /* ↑ 글자 크기 확대 */
-  border-radius: 1.2rem !important;        /* ↑ 모서리 둥글게 */
+/* 🔸 버튼 전체 래퍼 */
+.big-btns {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem; /* 버튼 사이 간격 */
+}
+
+/* 🔸 실제 버튼 */
+.big-btn a, .big-btn button {
+  display: inline-block;
+  width: min(90vw, 420px) !important;   /* 모바일에선 거의 전체 폭, PC에선 420px */
+  padding: 1.6rem 1.4rem !important;    /* 🔹 키 포인트: 버튼 높이 */
+  font-size: 1.4rem !important;         /* 🔹 글자 크기 */
   font-weight: 600 !important;
-  box-shadow: 0 6px 15px rgba(0,0,0,0.08);
-  transition: all .2s ease-in-out;
-}
-.big-btn button:hover, .big-btn a:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.12);
-}
-
-/* 버튼 컬러 강조 (네이비 프리미엄 톤 예시) */
-div[data-testid="stLinkButton"] > a {
-  background: linear-gradient(135deg, #23395B, #1A2C47) !important;
+  text-align: center !important;
+  border-radius: 1.4rem !important;
   color: white !important;
+  background: linear-gradient(135deg, #1F2A44, #2E4A7D) !important;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.12);
   border: none !important;
+  transition: all .25s ease-in-out;
+}
+.big-btn a:hover, .big-btn button:hover {
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 14px 28px rgba(0,0,0,0.18);
+  background: linear-gradient(135deg, #2C3E6B, #3A5B9C) !important;
 }
 </style>
 """, unsafe_allow_html=True)
-c1, c2 = st.columns(2, vertical_alignment="center")
-with c1:
-    st.markdown('<div class="big-btn">', unsafe_allow_html=True)
-    st.link_button("👩‍🏫 멘토 버전으로 이동", MENTOR_URL)
-    st.markdown('</div>', unsafe_allow_html=True)
-with c2:
-    st.markdown('<div class="big-btn">', unsafe_allow_html=True)
-    st.link_button("🧑‍🎓 멘티 버전으로 이동", MENTEE_URL)
-    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# =============== 버튼 본문 ===============
+st.markdown('<div class="big-btns">', unsafe_allow_html=True)
+
+st.markdown('<div class="big-btn">', unsafe_allow_html=True)
+st.link_button("👩‍🏫 멘토 버전으로 이동", MENTOR_URL)
+st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown('<div class="big-btn">', unsafe_allow_html=True)
+st.link_button("🧑‍🎓 멘티 버전으로 이동", MENTEE_URL)
+st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown('</div>', unsafe_allow_html=True)
