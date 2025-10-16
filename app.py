@@ -6,7 +6,6 @@
 
 import io, base64
 from pathlib import Path
-from typing import Set, Dict
 import pandas as pd
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -60,7 +59,7 @@ def inject_style():
     """, unsafe_allow_html=True)
 
 # ==============================
-# 3. 데이터 로딩
+# 3. CSV 로더
 # ==============================
 @st.cache_data(show_spinner=False)
 def load_default_csv() -> pd.DataFrame:
@@ -81,6 +80,7 @@ def load_default_csv() -> pd.DataFrame:
                         return df
                 except Exception:
                     continue
+    # 기본 더미
     return pd.DataFrame([{
         "name": "김샘", "gender": "남", "age_band": "만 40세~49세",
         "occupation_major": "교육", "comm_modes": "대면 만남, 일반 채팅",
@@ -92,36 +92,42 @@ def load_default_csv() -> pd.DataFrame:
     }])
 
 # ==============================
-# 4. 아바타 로더 (안전 + 기본 제공)
+# 4. 아바타 로더 (완전 안전판)
 # ==============================
 def load_fixed_avatars():
+    """
+    아바타 이미지 자동 로더 (완전 안전판)
+    - avatars 폴더가 없거나 폴더가 아닐 경우 무시
+    - 루트에서도 png/jpg/webp 탐색
+    - 하나도 없으면 기본 아바타 SVG 자동 생성
+    """
     exts = {".png", ".jpg", ".jpeg", ".webp"}
     paths = []
 
-    # avatars 폴더 탐색
     avatars_dir = Path.cwd() / "avatars"
-    if avatars_dir.exists() and avatars_dir.is_dir():
-        for p in sorted(avatars_dir.iterdir()):
-            if p.is_file() and p.suffix.lower() in exts:
-                paths.append(str(p))
-    else:
-        print(f"[INFO] avatars 폴더가 없거나 폴더가 아닙니다. ({avatars_dir})")
+    if avatars_dir.exists():
+        if avatars_dir.is_dir():
+            for p in sorted(avatars_dir.iterdir()):
+                if p.is_file() and p.suffix.lower() in exts:
+                    paths.append(str(p))
+        else:
+            print(f"[INFO] avatars가 폴더가 아니라 파일입니다. ({avatars_dir})")
 
-    # 루트 폴더 탐색
     root = Path.cwd()
-    if root.exists() and root.is_dir():
-        for p in sorted(root.iterdir()):
-            if p.is_file() and p.suffix.lower() in exts:
-                paths.append(str(p))
+    try:
+        if root.exists() and root.is_dir():
+            for p in sorted(root.iterdir()):
+                if p.is_file() and p.suffix.lower() in exts:
+                    paths.append(str(p))
+    except Exception as e:
+        print(f"[WARN] 루트 이미지 검색 중 오류 발생: {e}")
 
-    # 중복 제거
     seen, uniq = set(), []
     for p in paths:
         if p not in seen:
             uniq.append(p)
             seen.add(p)
 
-    # 없을 경우 기본 아바타 생성
     if not uniq:
         st.warning("사용 가능한 아바타 이미지가 없어 기본 아바타를 표시합니다.")
         default_svg = """
@@ -137,7 +143,7 @@ def load_fixed_avatars():
     return uniq
 
 # ==============================
-# 5. 점수 계산 유틸
+# 5. 유틸
 # ==============================
 def list_to_set(s): return {x.strip() for x in str(s).replace(";", ",").split(",") if x.strip()} if pd.notna(s) else set()
 def ratio_overlap(a,b): return len(a&b)/len(a|b) if a and b else 0
@@ -177,7 +183,9 @@ st.subheader("2) 연결될 준비")
 avatars = load_fixed_avatars()
 if avatars:
     selected = image_select("", images=avatars, captions=None, use_container_width=True, return_value="original", key="avatar_select")
-    if selected:
+    if selected.startswith("data:image"):  # 기본 SVG
+        st.session_state["avatar_bytes"] = None
+    else:
         with open(selected, "rb") as f:
             st.session_state["avatar_bytes"] = f.read()
 
@@ -216,7 +224,7 @@ for i, item in enumerate(ranked, start=1):
         st.markdown(f"### #{i}. {r['name']} ({r['occupation_major']}, {r['age_band']})")
         st.write(f"**소개:** {r['intro']}")
         st.write(f"**점수:** {item['score']}")
-        if "avatar_bytes" in st.session_state:
+        if st.session_state.get("avatar_bytes"):
             st.image(st.session_state["avatar_bytes"], width=96)
         if st.button(f"💬 {r['name']} 님에게 대화 신청하기", key=f"chat_{i}", use_container_width=True):
             if any(req["mentor"] == r["name"] for req in st.session_state["chat_requests"]):
