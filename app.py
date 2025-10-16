@@ -8,7 +8,7 @@
 - 결과 카드에 "💬 대화 신청하기" 버튼 + 신청 내역 표시
 """
 
-import io, base64
+import base64
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Set
 
@@ -33,6 +33,9 @@ PURPOSES = ["진로 / 커리어 조언", "학업 / 전문지식 조언", "사회
 TOPIC_PREFS = ["진로·직업", "학업·전문 지식", "인생 경험·삶의 가치관", "대중문화·취미", "사회 문제·시사", "건강·웰빙"]
 OCCUPATION_MAJORS = ["교육", "법률/행정", "연구개발/ IT", "예술/디자인", "의학/보건", "기타"]
 
+# 아바타 파일명 금칙어(포함 시 제외)
+BANNED_AVATAR_KEYWORDS = {"박명수"}
+
 # ==============================
 # 2) 전문 스타일
 # ==============================
@@ -56,16 +59,14 @@ def inject_style():
         box-shadow: 0 6px 12px rgba(2,132,199,0.25);
     }
     /* 아바타 타일 */
-    .gyeol-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
     .gyeol-avatar {
         width: 100%; border-radius: 14px; display:block;
         box-shadow: 0 2px 8px rgba(0,0,0,.06);
         border: 2px solid rgba(255,255,255,0.6);
+        margin-bottom: .4rem;
     }
-    .gyeol-card { padding: 6px; border-radius: 16px; background: rgba(255,255,255,0.72); backdrop-filter: blur(6px); }
     .gyeol-avatar.selected { outline: 3px solid #60a5fa; box-shadow: 0 12px 26px rgba(96,165,250,.35); }
-    .gyeol-pick { margin-top: .35rem; }
-    .gyeol-ghost { visibility: hidden; }
+    .gyeol-card { padding: 10px; border-radius: 16px; background: rgba(255,255,255,0.72); backdrop-filter: blur(6px); }
     </style>
     """, unsafe_allow_html=True)
 
@@ -87,7 +88,6 @@ def load_default_csv() -> pd.DataFrame:
                 try:
                     df = pd.read_csv(f, encoding=enc, sep=sep)
                     if not df.empty:
-                        # 불필요 인덱스 컬럼 제거
                         bad = [c for c in df.columns if str(c).lower().startswith("unnamed")]
                         if bad:
                             df = df.drop(columns=bad)
@@ -110,7 +110,6 @@ def load_default_csv() -> pd.DataFrame:
 # 4) 아바타 로더 (./avatars만, 완전 안전)
 # ==============================
 def _img_to_data_url(p: Path) -> Tuple[str, Optional[bytes]]:
-    """로컬 이미지 파일을 data URL로 변환 (파일명/캡션 숨김에 유용)"""
     mime = "image/png"
     ext = p.suffix.lower()
     if ext in [".jpg", ".jpeg"]:
@@ -125,6 +124,7 @@ def load_fixed_avatars() -> List[Tuple[str, Optional[bytes]]]:
     """
     반환: [(data_url, raw_bytes or None), ...]
     - 오직 ./avatars 폴더의 png/jpg/jpeg/webp만 사용
+    - 파일명이 금칙어를 포함하면 제외(예: '박명수')
     - 폴더가 없거나 비어있으면 기본 SVG 아바타 1개 제공
     - 절대 NotADirectoryError가 발생하지 않음
     """
@@ -135,6 +135,10 @@ def load_fixed_avatars() -> List[Tuple[str, Optional[bytes]]]:
     if avatars_dir.exists() and avatars_dir.is_dir():
         for p in sorted(avatars_dir.iterdir()):
             if p.is_file() and p.suffix.lower() in exts:
+                # 금칙어 필터
+                lower_name = p.name.lower()
+                if any(k in p.name for k in BANNED_AVATAR_KEYWORDS) or any(k.lower() in lower_name for k in BANNED_AVATAR_KEYWORDS):
+                    continue
                 try:
                     items.append(_img_to_data_url(p))
                 except Exception:
@@ -183,7 +187,7 @@ def compute_score(mentee: Dict, mentor_row: pd.Series) -> int:
 # ==============================
 # 6) 페이지 기본
 # ==============================
-st.set_page_config(page_title="결 — 멘토 추천 데모", page_icon="🤝", layout="centered")
+st.set_page_config(page_title="결 — 멘토 추천 데모", page_icon="🤝", layout="centered", initial_sidebar_state="collapsed")
 inject_style()
 st.title("결 — 멘토 추천 체험(멘티 전용)")
 mentors_df = load_default_csv()
@@ -202,34 +206,30 @@ SHOW = min(len(avatars), MAX_SHOW)
 
 if "selected_avatar_index" not in st.session_state:
     st.session_state["selected_avatar_index"] = 0
-
-# 그리드 렌더 (3×2)
-st.markdown("<div class='gyeol-card'><div class='gyeol-grid'>", unsafe_allow_html=True)
-
-def _avatar_tile(data_url: str, idx: int, selected: bool):
-    cls = "gyeol-avatar selected" if selected else "gyeol-avatar"
-    st.markdown(f"<img src='{data_url}' class='{cls}'/>", unsafe_allow_html=True)
-    # 라벨 없이 클릭 버튼 (시각적 높이 맞춤 위해 'ghost' 클래스 사용)
-    if st.button(" ", key=f"pick_{idx},btn", use_container_width=True):
-        st.session_state["selected_avatar_index"] = idx
-        # 선택 bytes 저장
-        st.session_state["avatar_bytes"] = avatars[idx][1]
-    else:
-        st.markdown("<div class='gyeol-ghost'>.</div>", unsafe_allow_html=True)
-
-# 6개까지만 출력 (위 3개 + 아래 3개)
-for idx in range(SHOW):
-    col = st.columns(1)[0]  # grid는 CSS로, 버튼은 각 셀에서 렌더
-    with col:
-        data_url, _bytes = avatars[idx]
-        sel = (st.session_state["selected_avatar_index"] == idx)
-        _avatar_tile(data_url, idx, sel)
-
-st.markdown("</div></div>", unsafe_allow_html=True)
-
-# 초기 bytes 세팅(최초 로드 시)
 if "avatar_bytes" not in st.session_state and SHOW:
-    st.session_state["avatar_bytes"] = avatars[st.session_state["selected_avatar_index"]][1]
+    st.session_state["avatar_bytes"] = avatars[0][1]
+
+st.markdown("<div class='gyeol-card'>", unsafe_allow_html=True)
+
+# 3×2 고정 배치: 위 3개, 아래 3개
+for row_start in range(0, SHOW, 3):
+    cols = st.columns(3, gap="small")
+    for j in range(3):
+        idx = row_start + j
+        if idx >= SHOW:
+            break
+        data_url, _bytes = avatars[idx]
+        selected = (st.session_state["selected_avatar_index"] == idx)
+        cls = "gyeol-avatar selected" if selected else "gyeol-avatar"
+        with cols[j]:
+            # 파일명/캡션 없이 이미지만 표시
+            st.markdown(f"<img src='{data_url}' class='{cls}'/>", unsafe_allow_html=True)
+            # 선택 버튼(문자 표시 최소화)
+            if st.button(" ", key=f"pick_{idx}", use_container_width=True):
+                st.session_state["selected_avatar_index"] = idx
+                st.session_state["avatar_bytes"] = _bytes
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 # ==============================
 # 8) 설문 입력
@@ -241,7 +241,7 @@ with st.form("mentee_form"):
     interests = st.multiselect("관심사", ["독서", "영화", "게임", "음악", "여행"])
     purpose = st.multiselect("멘토링 목적", PURPOSES, ["진로 / 커리어 조언"])
     topics = st.multiselect("대화 주제", TOPIC_PREFS, ["진로·직업", "학업·전문 지식"])
-    note = st.text_area("한 줄 요청사항", max_chars=120)
+    note = st.text_area("한 줄 요청사항", max_chars=120, placeholder="예) 디자인 포트폴리오 피드백 부탁드려요!")
     submitted = st.form_submit_button("추천 멘토 보기", use_container_width=True)
 
 if not submitted:
@@ -277,6 +277,7 @@ for i, item in enumerate(ranked, start=1):
         st.markdown(f"### #{i}. {r.get('name','(이름없음)')} ({r.get('occupation_major','')}, {r.get('age_band','')})")
         st.write(f"**소개:** {r.get('intro','')}")
         st.write(f"**점수:** {item['score']}")
+        # 선택한 아바타 미니 썸네일
         if st.session_state.get("avatar_bytes"):
             st.image(st.session_state["avatar_bytes"], width=96)
         if st.button(f"💬 {r.get('name','')} 님에게 대화 신청하기", key=f"chat_{i}", use_container_width=True):
