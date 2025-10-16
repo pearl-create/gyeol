@@ -1,16 +1,14 @@
 # app.py
 # -*- coding: utf-8 -*-
 """
-결(結) — 멘티 전용 매칭 데모 앱 (아바타 3×2 그리드 + 파일명 숨김 + 대화신청 + 안정판)
-- CSV 파일: 멘토더미.csv (자동 인코딩/구분자 감지, /mnt/data 우선)
-- 아바타: 오직 ./avatars 폴더만 스캔, 3×2 그리드, 파일명/캡션 숨김, 선택 테두리
-- 안전: avatars가 파일이거나 없을 때도 crash 없이 기본 아바타 표시
-- 결과 카드에 "💬 대화 신청하기" 버튼 + 신청 내역 표시
+결(結) — 멘티 전용 매칭 데모 (아바타 선택 제거 + URL 배경 이미지 + 대화신청)
+- CSV: 멘토더미.csv (인코딩/구분자 자동 감지, /mnt/data 우선)
+- 디자인: 페이지 전체 배경에 외부 이미지 URL 적용, 본문은 반투명 카드 처리
+- 기능: 설문 → 점수 계산 → 상위 5명 카드 + "💬 대화 신청하기" + 신청 내역
 """
 
-import base64
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict, Set
+from typing import Dict, Set
 
 import pandas as pd
 import streamlit as st
@@ -25,48 +23,46 @@ AGE_BANDS = [
     "만 13세~19세", "만 20세~29세", "만 30세~39세", "만 40세~49세",
     "만 50세~59세", "만 60세~69세", "만 70세~79세", "만 80세~89세", "만 90세 이상"
 ]
-COMM_MODES = ["대면 만남", "화상채팅", "일반 채팅"]
-TIME_SLOTS = ["오전", "오후", "저녁", "밤"]
-DAYS = ["월", "화", "수", "목", "금", "토", "일"]
-STYLES = ["연두부형", "분위기메이커형", "효율추구형", "댕댕이형", "감성 충만형", "냉철한 조언자형"]
 PURPOSES = ["진로 / 커리어 조언", "학업 / 전문지식 조언", "사회, 인생 경험 공유", "정서적 지지와 대화"]
 TOPIC_PREFS = ["진로·직업", "학업·전문 지식", "인생 경험·삶의 가치관", "대중문화·취미", "사회 문제·시사", "건강·웰빙"]
 OCCUPATION_MAJORS = ["교육", "법률/행정", "연구개발/ IT", "예술/디자인", "의학/보건", "기타"]
 
-# 아바타 파일명 금칙어(포함 시 제외)
-BANNED_AVATAR_KEYWORDS = {"박명수"}
+BACKGROUND_IMG_URL = "https://d2v80xjmx68n4w.cloudfront.net/members/portfolios/es5L21693729088.jpg?w=500"
 
 # ==============================
-# 2) 전문 스타일
+# 2) 스타일
 # ==============================
 def inject_style():
-    st.markdown("""
+    st.markdown(f"""
     <style>
-    [data-testid="stAppViewContainer"] {
-        background: radial-gradient(1100px 700px at 18% 8%, #eef3fb 0%, #dde5f3 45%, #cfd8e8 100%);
-    }
-    [data-testid="stHeader"] { background: transparent; }
-    .block-container { max-width: 920px; padding-top: 2rem; }
-    .stButton>button {
+      /* 페이지 전체 배경을 외부 URL로 */
+      [data-testid="stAppViewContainer"] {{
+        background-image: url('{BACKGROUND_IMG_URL}');
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+      }}
+      [data-testid="stHeader"] {{ background: transparent; }}
+      .block-container {{
+        max-width: 900px;
+        padding: 2.25rem 2rem 3rem;
+        background: rgba(255,255,255,0.72);
+        border-radius: 20px;
+        backdrop-filter: blur(4px);
+        box-shadow: 0 6px 22px rgba(0,0,0,0.12);
+      }}
+      h1, h2, h3 {{ letter-spacing: .2px; }}
+      .stButton>button {{
         background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-        color: #fff; border: none; border-radius: 12px; font-weight: 600;
+        color: #fff; border: none; border-radius: 12px; font-weight: 700;
         box-shadow: 0 6px 12px rgba(37,99,235,0.28);
-    }
-    .stButton>button:hover { filter: brightness(1.05); }
-    .stDownloadButton>button {
+      }}
+      .stButton>button:hover {{ filter: brightness(1.05); }}
+      .stDownloadButton>button {{
         background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
-        color: #fff; border: none; border-radius: 12px; font-weight: 600;
+        color: #fff; border: none; border-radius: 12px; font-weight: 700;
         box-shadow: 0 6px 12px rgba(2,132,199,0.25);
-    }
-    /* 아바타 타일 */
-    .gyeol-avatar {
-        width: 100%; border-radius: 14px; display:block;
-        box-shadow: 0 2px 8px rgba(0,0,0,.06);
-        border: 2px solid rgba(255,255,255,0.6);
-        margin-bottom: .4rem;
-    }
-    .gyeol-avatar.selected { outline: 3px solid #60a5fa; box-shadow: 0 12px 26px rgba(96,165,250,.35); }
-    .gyeol-card { padding: 10px; border-radius: 16px; background: rgba(255,255,255,0.72); backdrop-filter: blur(6px); }
+      }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -88,6 +84,7 @@ def load_default_csv() -> pd.DataFrame:
                 try:
                     df = pd.read_csv(f, encoding=enc, sep=sep)
                     if not df.empty:
+                        # 불필요 인덱스 열 제거
                         bad = [c for c in df.columns if str(c).lower().startswith("unnamed")]
                         if bad:
                             df = df.drop(columns=bad)
@@ -95,11 +92,10 @@ def load_default_csv() -> pd.DataFrame:
                         return df
                 except Exception:
                     continue
-    # 기본 한 명 (앱 보장)
+    # 파일이 전혀 없을 때 최소 보장 더미
     return pd.DataFrame([{
         "name": "김샘", "gender": "남", "age_band": "만 40세~49세",
-        "occupation_major": "교육", "comm_modes": "대면 만남, 일반 채팅",
-        "comm_time": "오전, 오후", "comm_days": "월, 수, 금", "style": "연두부형",
+        "occupation_major": "교육",
         "interests": "독서, 인문학, 건강/웰빙",
         "purpose": "사회, 인생 경험 공유, 정서적 지지와 대화",
         "topic_prefs": "인생 경험·삶의 가치관, 건강·웰빙",
@@ -107,59 +103,7 @@ def load_default_csv() -> pd.DataFrame:
     }])
 
 # ==============================
-# 4) 아바타 로더 (./avatars만, 완전 안전)
-# ==============================
-def _img_to_data_url(p: Path) -> Tuple[str, Optional[bytes]]:
-    mime = "image/png"
-    ext = p.suffix.lower()
-    if ext in [".jpg", ".jpeg"]:
-        mime = "image/jpeg"
-    elif ext == ".webp":
-        mime = "image/webp"
-    b = p.read_bytes()
-    b64 = base64.b64encode(b).decode("utf-8")
-    return f"data:{mime};base64,{b64}", b
-
-def load_fixed_avatars() -> List[Tuple[str, Optional[bytes]]]:
-    """
-    반환: [(data_url, raw_bytes or None), ...]
-    - 오직 ./avatars 폴더의 png/jpg/jpeg/webp만 사용
-    - 파일명이 금칙어를 포함하면 제외(예: '박명수')
-    - 폴더가 없거나 비어있으면 기본 SVG 아바타 1개 제공
-    - 절대 NotADirectoryError가 발생하지 않음
-    """
-    exts = {".png", ".jpg", ".jpeg", ".webp"}
-    items: List[Tuple[str, Optional[bytes]]] = []
-
-    avatars_dir = Path.cwd() / "avatars"
-    if avatars_dir.exists() and avatars_dir.is_dir():
-        for p in sorted(avatars_dir.iterdir()):
-            if p.is_file() and p.suffix.lower() in exts:
-                # 금칙어 필터
-                lower_name = p.name.lower()
-                if any(k in p.name for k in BANNED_AVATAR_KEYWORDS) or any(k.lower() in lower_name for k in BANNED_AVATAR_KEYWORDS):
-                    continue
-                try:
-                    items.append(_img_to_data_url(p))
-                except Exception:
-                    continue  # 손상 파일은 건너뜀
-
-    if not items:
-        # 기본 SVG 아바타 1개
-        default_svg = """
-        <svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="100" cy="100" r="90" fill="#e0e7ff" stroke="#93c5fd" stroke-width="5"/>
-          <circle cx="100" cy="85" r="35" fill="#bfdbfe"/>
-          <path d="M35,180 a65,65 0 0,1 130,0" fill="#93c5fd"/>
-        </svg>
-        """
-        b64 = base64.b64encode(default_svg.encode("utf-8")).decode("utf-8")
-        items = [(f"data:image/svg+xml;base64,{b64}", None)]
-
-    return items
-
-# ==============================
-# 5) 점수 계산
+# 4) 점수 계산
 # ==============================
 def list_to_set(s) -> Set[str]:
     return {x.strip() for x in str(s).replace(";", ",").split(",") if x.strip()} if pd.notna(s) else set()
@@ -185,55 +129,22 @@ def compute_score(mentee: Dict, mentor_row: pd.Series) -> int:
     )
 
 # ==============================
-# 6) 페이지 기본
+# 5) 페이지 기본
 # ==============================
 st.set_page_config(page_title="결 — 멘토 추천 데모", page_icon="🤝", layout="centered", initial_sidebar_state="collapsed")
 inject_style()
+
 st.title("결 — 멘토 추천 체험(멘티 전용)")
 mentors_df = load_default_csv()
 src = st.session_state.get("mentor_csv_path", "(기본 더미)")
 st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명 · 경로: {src}")
 
 # ==============================
-# 7) 아바타 선택 (3×2, 파일명 숨김)
+# 6) 설문 입력
 # ==============================
 st.markdown("---")
-st.subheader("2) 연결될 준비")
+st.subheader("1) 나에 대해 알려주세요")
 
-avatars = load_fixed_avatars()        # [(data_url, bytes/None), ...]
-MAX_SHOW = 6
-SHOW = min(len(avatars), MAX_SHOW)
-
-if "selected_avatar_index" not in st.session_state:
-    st.session_state["selected_avatar_index"] = 0
-if "avatar_bytes" not in st.session_state and SHOW:
-    st.session_state["avatar_bytes"] = avatars[0][1]
-
-st.markdown("<div class='gyeol-card'>", unsafe_allow_html=True)
-
-# 3×2 고정 배치: 위 3개, 아래 3개
-for row_start in range(0, SHOW, 3):
-    cols = st.columns(3, gap="small")
-    for j in range(3):
-        idx = row_start + j
-        if idx >= SHOW:
-            break
-        data_url, _bytes = avatars[idx]
-        selected = (st.session_state["selected_avatar_index"] == idx)
-        cls = "gyeol-avatar selected" if selected else "gyeol-avatar"
-        with cols[j]:
-            # 파일명/캡션 없이 이미지만 표시
-            st.markdown(f"<img src='{data_url}' class='{cls}'/>", unsafe_allow_html=True)
-            # 선택 버튼(문자 표시 최소화)
-            if st.button(" ", key=f"pick_{idx}", use_container_width=True):
-                st.session_state["selected_avatar_index"] = idx
-                st.session_state["avatar_bytes"] = _bytes
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# ==============================
-# 8) 설문 입력
-# ==============================
 with st.form("mentee_form"):
     name = st.text_input("이름", "")
     gender = st.radio("성별", GENDERS, horizontal=True)
@@ -256,13 +167,13 @@ mentee = {
 }
 
 # ==============================
-# 9) 매칭 & 결과
+# 7) 매칭 & 결과
 # ==============================
 scores = [{"idx": i, "score": compute_score(mentee, row)} for i, row in mentors_df.iterrows()]
 ranked = sorted(scores, key=lambda x: x["score"], reverse=True)[:5]
 
 st.markdown("---")
-st.subheader("3) 추천 결과")
+st.subheader("2) 추천 결과")
 
 if "chat_requests" not in st.session_state:
     st.session_state["chat_requests"] = []
@@ -277,9 +188,6 @@ for i, item in enumerate(ranked, start=1):
         st.markdown(f"### #{i}. {r.get('name','(이름없음)')} ({r.get('occupation_major','')}, {r.get('age_band','')})")
         st.write(f"**소개:** {r.get('intro','')}")
         st.write(f"**점수:** {item['score']}")
-        # 선택한 아바타 미니 썸네일
-        if st.session_state.get("avatar_bytes"):
-            st.image(st.session_state["avatar_bytes"], width=96)
         if st.button(f"💬 {r.get('name','')} 님에게 대화 신청하기", key=f"chat_{i}", use_container_width=True):
             if any(req["mentor"] == r.get("name","") for req in st.session_state["chat_requests"]):
                 st.warning("이미 신청한 멘토입니다.")
