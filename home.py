@@ -101,27 +101,6 @@ div[data-testid="stLinkButton"] > a:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# ===================== 로고 렌더 (URL 버전) =====================
-import urllib.request
-import ssl
-import streamlit as st
-
-# SSL 경고 회피용(필수 아님)
-_ssl_ctx = ssl.create_default_context()
-
-@st.cache_data(show_spinner=False)
-def _fetch_image_bytes(url: str) -> bytes:
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-            "Referer": "https://streamlit.app/",  # 일부 CDN의 핫링크 차단 우회
-        },
-    )
-    with urllib.request.urlopen(req, timeout=10, context=_ssl_ctx) as resp:
-        return resp.read()
-
 # ===================== 로고 렌더 (URL 안정 버전) =====================
 def render_logo(
     url: str = "https://drive.google.com/file/d/1AUF39Y9gumgxPChruyk9dju0JkmEpXAC/view",
