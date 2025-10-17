@@ -54,7 +54,27 @@ CURRENT_OCCUPATIONS = [
 HOBBIES = ["독서", "음악 감상", "영화/드라마 감상", "게임 (PC/콘솔/모바일)", "운동/스포츠 관람",
            "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래"]
 
-OCCUPATION_MAJORS = ["교육", "법률/행정", "연구개발/ IT", "예술/디자인", "의학/보건", "기타"]
+OCCUPATION_MAJORS = ["경영자(CEO / 사업주 / 임원 / 부서장)",
+    "행정관리(공공기관 관리자 / 기업 행정팀장 / 프로젝트 매니저)",
+    "보건(의사 / 치과의사 / 약사 / 간호사 / 한의사 / 물리치료사 / 간호조무사 / 재활치료사 / 요양보호사)",
+    "법률/행정(변호사 / 판사 / 검사 / 세무사 / 행정사)",
+    "교육(교수 / 교사 / 학원강사 / 연구원)",
+    "연구개발/ IT(엔지니어 / 연구원 / 소프트웨어 개발자 / 데이터 분석가)",
+    "예술/디자인(디자이너 / 예술가 / 작가 / 사진작가)",
+    "기술(기술자 / 공학 기술자 / 실험실 기술자 / 회계사 / 건축기사)",
+    "서비스 전문(상담사 / 심리치료사 / 사회복지사 / 코디네이터)",
+    "일반 사무 (사무직원 / 경리 / 비서 / 고객 상담 / 문서 관리)",
+    "영업(영업사원 / 마케팅 지원 / 고객 관리)",
+    "판매(점원 / 슈퍼 / 편의점 직원 / 백화점 직원)",
+    "생산/제조(공장 생산직 / 조립공 / 기계조작원 / 용접공)",
+    "시설(배관공 / 전기공 / 건설노무자 / 목수)",
+    "농림수산업(농부 / 축산업 / 어부 / 임업 종사자)",
+    "운송/기계(트럭기사 / 버스기사 / 지게차 운전 / 기계조작원)",
+    "청소 / 경비(경비원 / 환경미화원)",
+    "학생 (초·중·고·대학생 / 대학원생)",
+    "전업주부",
+    "구직자 / 최근 퇴사자 / 프리랜서",
+    "기타"]
 
 INTELLECTUAL_INTERESTS = [
     "인문학 (철학, 역사, 문학 등)",
@@ -74,7 +94,6 @@ COMMUNICATION_STYLES = [
     "냉철한 조언자형: 논리적이고 문제 해결 중심으로 조언을 주고받는 편이에요.",
 ]
 
-TOPIC_PREFS = ["진로·직업", "학업·전문 지식", "인생 경험·가치관", "정서적 지지", "IT·테크", "예술·문화", "건강·웰빙"]
 
 # 현재 직종 → 전공계열 간소 맵핑 (멘토 CSV의 occupation_major와 연결용)
 OCC_TO_MAJOR = {
@@ -254,23 +273,22 @@ src = st.session_state.get("mentor_csv_path", "(기본 더미)")
 st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명 · 경로: {src}")
 
 st.markdown("---")
-st.subheader("내가 원하는 멘토의 조건")
+st.subheader("1분만 투자하세요")
 
 with st.form("mentee_form"):
-    name = st.text_input("이름(선택)", "")
-    gender = st.radio("성별(선택)", GENDERS, horizontal=True, index=0)
-    age_band = st.selectbox("나이대(선택)", AGE_BANDS, index=0)
+    name = st.text_input("이름", "")
+    gender = st.radio("성별", GENDERS, horizontal=True, index=0)
+    age_band = st.selectbox("나이대", AGE_BANDS, index=0)
 
     # 핵심: 네가 준 리스트로 입력
     purpose = st.multiselect("멘토링 목적", PURPOSES, ["진로 / 커리어 조언"])
-    desired_current_occ = st.multiselect("관심 있는 현재 직종", CURRENT_OCCUPATIONS)
-    pref_majors = st.multiselect("선호 전공계열(멘토 전공)", OCCUPATION_MAJORS)
-    interests = st.multiselect("관심사/취미", HOBBIES)
-    topics = st.multiselect("대화 주제", TOPIC_PREFS, ["진로·직업", "학업·전문 지식"])
+    desired_current_occ = st.multiselect("현재 직종", CURRENT_OCCUPATIONS)
+    pref_majors = st.multiselect("원하는 멘토의 직종", OCCUPATION_MAJORS)
+    interests = st.multiselect("취미", HOBBIES)
 
     # (선택) 지적 관심사/소통 스타일 입력만 받고 현재 점수에는 미사용
-    intel = st.multiselect("지적 관심사(선택)", INTELLECTUAL_INTERESTS)
-    comms = st.multiselect("소통 스타일(선택)", COMMUNICATION_STYLES)
+    intel = st.multiselect("지적 관심사", INTELLECTUAL_INTERESTS)
+    comms = st.multiselect("소통 스타일", COMMUNICATION_STYLES)
 
     note = st.text_area("한 줄 요청사항", max_chars=120, placeholder="예) 간호사 퇴직하신 선배님을 찾습니다!")
 
