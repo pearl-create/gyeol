@@ -101,30 +101,40 @@ div[data-testid="stLinkButton"] > a:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# ===================== 로고 렌더 (URL 안정 버전) =====================
-def render_logo(
-    url: str = "https://drive.google.com/file/d/1AUF39Y9gumgxPChruyk9dju0JkmEpXAC/view",
-    width_px: int = 600,
-):
-    try:
-        img_bytes = _fetch_image_bytes(url)
+from pathlib import Path
+import streamlit as st
+
+# ===================== 로고 렌더 (GitHub 리포 내 파일 버전) =====================
+def render_logo(width_px: int = 600):
+    """
+    Streamlit이 동일 폴더(또는 하위 폴더)의 로고 파일을 직접 읽어 렌더링.
+    GitHub repo에 logo_gyeol.png 또는 logo_gyeol.jpg가 포함되어야 함.
+    """
+    base = Path(__file__).resolve().parent
+    logo_path = None
+
+    # 파일 자동 탐색 (png > jpg 우선)
+    for name in ["logo_gyeol.png", "logo_gyeol.jpg"]:
+        p = base / name
+        if p.is_file():
+            logo_path = p
+            break
+
+    if logo_path:
         st.markdown('<div class="logo-wrap">', unsafe_allow_html=True)
-        # HTML <img> 대신 st.image 사용: alt 텍스트 깜빡임/표시 없음
-        st.image(img_bytes, use_container_width=False, width=width_px)
+        st.image(str(logo_path), use_container_width=False, width=width_px)
         st.markdown('</div>', unsafe_allow_html=True)
-    except Exception as e:
-        # 마지막 안전장치: 간단한 SVG 플레이스홀더
+    else:
+        # 예비: 로고가 없을 때 SVG 대체 출력
         st.markdown(f"""
         <div class="logo-wrap">
-          <svg width="{width_px}" height="{int(width_px*0.28)}" viewBox="0 0 640 180" xmlns="http://www.w3.org/2000/svg">
+          <svg width="{width_px}" height="{int(width_px*0.25)}" viewBox="0 0 640 180" xmlns="http://www.w3.org/2000/svg">
             <rect width="100%" height="100%" rx="18" fill="#1F2759"/>
             <text x="32" y="110" fill="#9DAEFF" style="font: 900 72px 'Pretendard', sans-serif;">결</text>
             <text x="120" y="110" fill="#C9D4FF" style="font: 700 36px 'Pretendard', sans-serif;">Mentor–Mentee</text>
           </svg>
         </div>
         """, unsafe_allow_html=True)
-        st.info("로고 이미지를 불러오지 못해 임시 로고를 표시했어요. 이미지 URL/접속권한/CDN 차단 여부를 확인해 주세요.")
-
 
 
 # ===================== 본문 =====================
