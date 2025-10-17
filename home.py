@@ -102,12 +102,50 @@ div[data-testid="stLinkButton"] > a:hover {
 """, unsafe_allow_html=True)
 
 # ===================== 로고 렌더 (URL 버전) =====================
-def render_logo(url: str = "https://drive.google.com/file/d/1AUF39Y9gumgxPChruyk9dju0JkmEpXAC/view"):
-    st.markdown(f"""
-    <div class="logo-wrap">
-      <img src="{url}" alt="결 로고" style="width:min(600px,85vw);max-width:680px;border-radius:1.2rem;box-shadow:0 10px 40px rgba(80,100,255,0.3);">
-    </div>
-    """, unsafe_allow_html=True)
+import urllib.request
+import ssl
+import streamlit as st
+
+# SSL 경고 회피용(필수 아님)
+_ssl_ctx = ssl.create_default_context()
+
+@st.cache_data(show_spinner=False)
+def _fetch_image_bytes(url: str) -> bytes:
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            "Referer": "https://streamlit.app/",  # 일부 CDN의 핫링크 차단 우회
+        },
+    )
+    with urllib.request.urlopen(req, timeout=10, context=_ssl_ctx) as resp:
+        return resp.read()
+
+# ===================== 로고 렌더 (URL 안정 버전) =====================
+def render_logo(
+    url: str = "https://drive.google.com/file/d/1AUF39Y9gumgxPChruyk9dju0JkmEpXAC/view",
+    width_px: int = 600,
+):
+    try:
+        img_bytes = _fetch_image_bytes(url)
+        st.markdown('<div class="logo-wrap">', unsafe_allow_html=True)
+        # HTML <img> 대신 st.image 사용: alt 텍스트 깜빡임/표시 없음
+        st.image(img_bytes, use_container_width=False, width=width_px)
+        st.markdown('</div>', unsafe_allow_html=True)
+    except Exception as e:
+        # 마지막 안전장치: 간단한 SVG 플레이스홀더
+        st.markdown(f"""
+        <div class="logo-wrap">
+          <svg width="{width_px}" height="{int(width_px*0.28)}" viewBox="0 0 640 180" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" rx="18" fill="#1F2759"/>
+            <text x="32" y="110" fill="#9DAEFF" style="font: 900 72px 'Pretendard', sans-serif;">결</text>
+            <text x="120" y="110" fill="#C9D4FF" style="font: 700 36px 'Pretendard', sans-serif;">Mentor–Mentee</text>
+          </svg>
+        </div>
+        """, unsafe_allow_html=True)
+        st.info("로고 이미지를 불러오지 못해 임시 로고를 표시했어요. 이미지 URL/접속권한/CDN 차단 여부를 확인해 주세요.")
+
 
 
 # ===================== 본문 =====================
