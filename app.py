@@ -158,19 +158,19 @@ def compute_score(mentee: Dict, mentor_row: pd.Series) -> int:
 # ==============================
 # 5) 페이지 기본
 # ==============================
-st.set_page_config(page_title="결 — 멘토 추천 데모", page_icon="🤝", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="결: 멘티 데모", page_icon="🤝", layout="centered", initial_sidebar_state="collapsed")
 inject_style()
 
-st.title("결 — 멘토 추천 체험(멘티 전용)")
+st.title("연결될 준비")
 mentors_df = load_default_csv()
 src = st.session_state.get("mentor_csv_path", "(기본 더미)")
-st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명 · 경로: {src}")
+st.caption("멘토 데이터 세트 로드됨: {len(mentors_df)}명 · 경로: {src}")
 
 # ==============================
 # 6) 설문 입력
 # ==============================
 st.markdown("---")
-st.subheader("1) 나에 대해 알려주세요")
+st.subheader("")
 
 with st.form("mentee_form"):
     name = st.text_input("이름", "")
