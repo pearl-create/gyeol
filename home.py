@@ -101,24 +101,14 @@ div[data-testid="stLinkButton"] > a:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# ===================== 로고 렌더 =====================
-def render_logo(width_px: int = 600):
-    base = Path(__file__).resolve().parent
-    for name in ["logo_gyeol.jpg", "logo_gyeol.png"]:
-        p = base / name
-        if p.is_file():
-            st.markdown('<div class="logo-wrap">', unsafe_allow_html=True)
-            st.image(p.read_bytes(), use_container_width=False)
-            st.markdown('</div>', unsafe_allow_html=True)
-            return
+# ===================== 로고 렌더 (URL 버전) =====================
+def render_logo(url: str = "https://drive.google.com/file/d/1AUF39Y9gumgxPChruyk9dju0JkmEpXAC/view"):
     st.markdown(f"""
     <div class="logo-wrap">
-      <svg width="{width_px}" height="{int(width_px*0.25)}" viewBox="0 0 640 180" xmlns="http://www.w3.org/2000/svg">
-        <text x="0" y="100" fill="#9DAEFF" style="font: 900 100px 'Pretendard', sans-serif;">결</text>
-        <text x="130" y="100" fill="#C9D4FF" style="font: 700 48px 'Pretendard', sans-serif;">Mentor–Mentee</text>
-      </svg>
+      <img src="{url}" alt="결 로고" style="width:min(600px,85vw);max-width:680px;border-radius:1.2rem;box-shadow:0 10px 40px rgba(80,100,255,0.3);">
     </div>
     """, unsafe_allow_html=True)
+
 
 # ===================== 본문 =====================
 render_logo()
