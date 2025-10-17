@@ -27,20 +27,43 @@ PURPOSES = ["진로 / 커리어 조언", "학업 / 전문지식 조언", "사회
 TOPIC_PREFS = ["진로·직업", "학업·전문 지식", "인생 경험·삶의 가치관", "대중문화·취미", "사회 문제·시사", "건강·웰빙"]
 OCCUPATION_MAJORS = ["교육", "법률/행정", "연구개발/ IT", "예술/디자인", "의학/보건", "기타"]
 
-BACKGROUND_IMG_URL = "https://d2v80xjmx68n4w.cloudfront.net/members/portfolios/es5L21693729088.jpg?w=500"
+# ==============================
+# 1) 기본 상수 (배경 파일 직접 로드)
+# ==============================
+from base64 import b64encode
+import mimetypes
+
+BACKGROUND_FILE = "logo_gyeol.png"  # ← 리포에 포함된 파일명
+
+@st.cache_data(show_spinner=False)
+def get_background_data_url() -> str | None:
+    """logo_gyeol.png 파일을 base64 data URI로 변환"""
+    p = Path(__file__).resolve().parent / BACKGROUND_FILE
+    if not p.is_file():
+        return None
+    mime, _ = mimetypes.guess_type(p.name)
+    mime = mime or "image/png"
+    data = p.read_bytes()
+    b64 = b64encode(data).decode("ascii")
+    return f"data:{mime};base64,{b64}"
 
 # ==============================
 # 2) 스타일
 # ==============================
+# ==============================
+# 2) 스타일
+# ==============================
 def inject_style():
+    data_url = get_background_data_url()
+    if data_url:
+        bg_style = f"background-image: url('{data_url}'); background-size: cover; background-position: center; background-attachment: fixed;"
+    else:
+        bg_style = "background: radial-gradient(circle at 30% 30%, #14193F, #1B1F4B 25%, #10142C 60%, #080A1A 100%);"
+
     st.markdown(f"""
     <style>
-      /* 페이지 전체 배경을 외부 URL로 */
       [data-testid="stAppViewContainer"] {{
-        background-image: url('{BACKGROUND_IMG_URL}');
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
+        {bg_style}
       }}
       [data-testid="stHeader"] {{ background: transparent; }}
       .block-container {{
@@ -65,6 +88,10 @@ def inject_style():
       }}
     </style>
     """, unsafe_allow_html=True)
+
+    if not data_url:
+        st.caption("💡 'logo_gyeol.png' 파일을 찾지 못했습니다. 같은 폴더에 넣어주세요.")
+
 
 # ==============================
 # 3) CSV 로딩 (강건)
