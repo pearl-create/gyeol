@@ -1,10 +1,11 @@
 # app.py
 # -*- coding: utf-8 -*-
 """
-결(結) — 멘티 전용 매칭 데모 (URL/로컬 배경 + 가중치 매칭 + 대화신청)
+결(結) — 멘티 전용 매칭 데모 (대화 주제 제거 버전)
 - CSV: 멘토더미.csv (인코딩/구분자 자동 감지, /mnt/data 우선)
-- 입력: 네가 준 리스트들로 폼 구성 (목적/현재 직종/취미/전공계열/주제/요청메모)
-- 매칭: 목적·취미·주제 겹침 + 현재직종→전공계열 맵핑 + 선호 전공계열 일치 + 메모-소개 TF-IDF
+- 디자인: 로컬 logo_gyeol.png가 있으면 배경으로, 없으면 그라디언트
+- 입력: PURPOSES / CURRENT_OCCUPATIONS / HOBBIES / OCCUPATION_MAJORS / note
+- 매칭: 목적, 관심사(취미), 선호 전공계열, 현재 직종→전공계열 매핑, note-소개 TF-IDF
 - 출력: 상위 5명 카드 + "💬 대화 신청하기" + 신청 내역
 """
 
@@ -17,7 +18,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # ==============================
-# 1) 리스트(변수)
+# 1) 리스트(변수) — (변수명 변경 없음)
 # ==============================
 GENDERS = ["남", "여", "기타"]
 AGE_BANDS = [
@@ -54,48 +55,9 @@ CURRENT_OCCUPATIONS = [
 HOBBIES = ["독서", "음악 감상", "영화/드라마 감상", "게임 (PC/콘솔/모바일)", "운동/스포츠 관람",
            "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래"]
 
-OCCUPATION_MAJORS = ["경영자(CEO / 사업주 / 임원 / 부서장)",
-    "행정관리(공공기관 관리자 / 기업 행정팀장 / 프로젝트 매니저)",
-    "보건(의사 / 치과의사 / 약사 / 간호사 / 한의사 / 물리치료사 / 간호조무사 / 재활치료사 / 요양보호사)",
-    "법률/행정(변호사 / 판사 / 검사 / 세무사 / 행정사)",
-    "교육(교수 / 교사 / 학원강사 / 연구원)",
-    "연구개발/ IT(엔지니어 / 연구원 / 소프트웨어 개발자 / 데이터 분석가)",
-    "예술/디자인(디자이너 / 예술가 / 작가 / 사진작가)",
-    "기술(기술자 / 공학 기술자 / 실험실 기술자 / 회계사 / 건축기사)",
-    "서비스 전문(상담사 / 심리치료사 / 사회복지사 / 코디네이터)",
-    "일반 사무 (사무직원 / 경리 / 비서 / 고객 상담 / 문서 관리)",
-    "영업(영업사원 / 마케팅 지원 / 고객 관리)",
-    "판매(점원 / 슈퍼 / 편의점 직원 / 백화점 직원)",
-    "생산/제조(공장 생산직 / 조립공 / 기계조작원 / 용접공)",
-    "시설(배관공 / 전기공 / 건설노무자 / 목수)",
-    "농림수산업(농부 / 축산업 / 어부 / 임업 종사자)",
-    "운송/기계(트럭기사 / 버스기사 / 지게차 운전 / 기계조작원)",
-    "청소 / 경비(경비원 / 환경미화원)",
-    "학생 (초·중·고·대학생 / 대학원생)",
-    "전업주부",
-    "구직자 / 최근 퇴사자 / 프리랜서",
-    "기타"]
+OCCUPATION_MAJORS = ["교육", "법률/행정", "연구개발/ IT", "예술/디자인", "의학/보건", "기타"]
 
-INTELLECTUAL_INTERESTS = [
-    "인문학 (철학, 역사, 문학 등)",
-    "사회과학 (정치, 경제, 사회, 심리 등)",
-    "자연과학 (물리, 화학, 생명과학 등)",
-    "수학/논리 퍼즐",
-    "IT/테크놀로지 (AI, 코딩, 로봇 등)",
-    "환경/지속가능성",
-]
-
-COMMUNICATION_STYLES = [
-    "연두부형: 조용하고 차분하게, 상대방 얘기를 경청하며 공감해 주는 편이에요.",
-    "분위기메이커형: 활발하고 에너지가 넘쳐 대화를 이끌어가는 편이에요.",
-    "효율추구형 : 주제를 체계적으로 정리하고 목표 지향적으로 대화하는 편이에요.",
-    "댕댕이형: 자유롭고 편안하게, 즉흥적으로 대화를 이어가는 편이에요.",
-    "감성 충만형: 감성적인 대화를 좋아하고 위로와 지지를 주는 편이에요. ",
-    "냉철한 조언자형: 논리적이고 문제 해결 중심으로 조언을 주고받는 편이에요.",
-]
-
-
-# 현재 직종 → 전공계열 간소 맵핑 (멘토 CSV의 occupation_major와 연결용)
+# 현재 직종 → 전공계열 매핑 (CSV의 occupation_major와 비교용)
 OCC_TO_MAJOR = {
     "경영자(CEO / 사업주 / 임원 / 부서장)": "기타",
     "행정관리(공공기관 관리자 / 기업 행정팀장 / 프로젝트 매니저)": "법률/행정",
@@ -104,20 +66,6 @@ OCC_TO_MAJOR = {
     "교육(교수 / 교사 / 학원강사 / 연구원)": "교육",
     "연구개발/ IT(엔지니어 / 연구원 / 소프트웨어 개발자 / 데이터 분석가)": "연구개발/ IT",
     "예술/디자인(디자이너 / 예술가 / 작가 / 사진작가)": "예술/디자인",
-    "기술(기술자 / 공학 기술자 / 실험실 기술자 / 회계사 / 건축기사)": "기타",
-    "서비스 전문(상담사 / 심리치료사 / 사회복지사 / 코디네이터)": "기타",
-    "일반 사무 (사무직원 / 경리 / 비서 / 고객 상담 / 문서 관리)": "기타",
-    "영업(영업사원 / 마케팅 지원 / 고객 관리)": "기타",
-    "판매(점원 / 슈퍼 / 편의점 직원 / 백화점 직원)": "기타",
-    "생산/제조(공장 생산직 / 조립공 / 기계조작원 / 용접공)": "기타",
-    "시설(배관공 / 전기공 / 건설노무자 / 목수)": "기타",
-    "농림수산업(농부 / 축산업 / 어부 / 임업 종사자)": "기타",
-    "운송/기계(트럭기사 / 버스기사 / 지게차 운전 / 기계조작원)": "기타",
-    "청소 / 경비(경비원 / 환경미화원)": "기타",
-    "학생 (초·중·고·대학생 / 대학원생)": "기타",
-    "전업주부": "기타",
-    "구직자 / 최근 퇴사자 / 프리랜서": "기타",
-    "기타": "기타",
 }
 
 # ==============================
@@ -144,7 +92,6 @@ def inject_style():
     if data_url:
         bg_style = f"background-image: url('{data_url}'); background-size: cover; background-position: center; background-attachment: fixed;"
     else:
-        # 로컬 이미지 없으면 그라디언트
         bg_style = "background: radial-gradient(circle at 30% 30%, #14193F, #1B1F4B 25%, #10142C 60%, #080A1A 100%);"
 
     st.markdown(f"""
@@ -200,15 +147,15 @@ def load_default_csv() -> pd.DataFrame:
                     continue
     return pd.DataFrame([{
         "name": "김샘", "gender": "남", "age_band": "만 60세~69세",
+        "current_occupation": "교육(교수 / 교사 / 학원강사 / 연구원)",
         "occupation_major": "교육",
         "interests": "독서, 인문학",
         "purpose": "사회, 인생 경험 공유, 정서적 지지와 대화",
-        "topic_prefs": "인생 경험·가치관, 건강·웰빙",
         "intro": "경청 중심의 상담을 합니다."
     }])
 
 # ==============================
-# 4) 매칭 유틸/스코어
+# 4) 매칭 유틸/스코어 (대화 주제 제거)
 # ==============================
 def list_to_set(s) -> Set[str]:
     if pd.isna(s):
@@ -227,7 +174,6 @@ def tfidf_similarity(a: str, b: str) -> float:
     return float(cosine_similarity(X[0], X[1])[0, 0])
 
 def map_current_occ_to_majors(selected_occs: Set[str]) -> Set[str]:
-    """멘티가 고른 '현재 직종'들을 전공계열 세트로 변환"""
     majors = set()
     for occ in selected_occs:
         majors.add(OCC_TO_MAJOR.get(occ, "기타"))
@@ -236,29 +182,22 @@ def map_current_occ_to_majors(selected_occs: Set[str]) -> Set[str]:
 def compute_score(mentee: Dict, mentor_row: pd.Series) -> int:
     """
     가중치(총 100):
-      - 목적 겹침 25
-      - 취미/관심사 겹침 20
-      - 대화 주제 겹침 10
-      - 선호 전공계열 포함 20
-      - 현재 직종→전공계열 매핑 일치 15
-      - 요청 메모 vs 소개 TF-IDF 10
+      - 목적 겹침 30
+      - 취미/관심사 겹침 25
+      - 선호 전공계열 포함 25
+      - '현재 직종'→전공계열 매핑 일치 10
+      - note vs intro TF-IDF 10
     """
     s = lambda k: list_to_set(mentor_row.get(k, ""))
-    # mentor 단일 전공계열(문자열)과 멘티 선호/매핑 계열 비교
     mentor_major = (mentor_row.get("occupation_major", "") or "").strip()
 
-    purpose_score = ratio_overlap(mentee["purpose"], s("purpose")) * 25
-    hobby_score   = ratio_overlap(mentee["interests"], s("interests")) * 20
-    topic_score   = ratio_overlap(mentee["topics"], s("topic_prefs")) * 10
-
-    major_pref_score = 20.0 if mentor_major and mentor_major in mentee["pref_majors"] else 0.0
-
-    mapped_majors = mentee["mapped_majors"]  # 현재직종 → 전공계열
-    mapped_occ_score = 15.0 if mentor_major and mentor_major in mapped_majors else 0.0
-
+    purpose_score = ratio_overlap(mentee["purpose"], s("purpose")) * 30
+    hobby_score   = ratio_overlap(mentee["interests"], s("interests")) * 25
+    major_pref_score = 25.0 if mentor_major and mentor_major in mentee["pref_majors"] else 0.0
+    mapped_occ_score = 10.0 if mentor_major and mentor_major in mentee["mapped_majors"] else 0.0
     note_score = tfidf_similarity(mentee["note"], mentor_row.get("intro", "")) * 10
 
-    total = purpose_score + hobby_score + topic_score + major_pref_score + mapped_occ_score + note_score
+    total = purpose_score + hobby_score + major_pref_score + mapped_occ_score + note_score
     return int(round(total))
 
 # ==============================
@@ -273,23 +212,21 @@ src = st.session_state.get("mentor_csv_path", "(기본 더미)")
 st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명 · 경로: {src}")
 
 st.markdown("---")
-st.subheader("1분만 투자하세요")
+st.subheader("내가 원하는 멘토의 조건")
 
 with st.form("mentee_form"):
-    name = st.text_input("이름", "")
-    gender = st.radio("성별", GENDERS, horizontal=True, index=0)
-    age_band = st.selectbox("나이대", AGE_BANDS, index=0)
+    # 프로필(선택)
+    name = st.text_input("이름(선택)", "")
+    gender = st.radio("성별(선택)", GENDERS, horizontal=True, index=0)
+    age_band = st.selectbox("나이대(선택)", AGE_BANDS, index=0)
 
-    # 핵심: 네가 준 리스트로 입력
+    # 핵심 입력 — (변수명 유지)
     purpose = st.multiselect("멘토링 목적", PURPOSES, ["진로 / 커리어 조언"])
-    desired_current_occ = st.multiselect("현재 직종", CURRENT_OCCUPATIONS)
-    pref_majors = st.multiselect("원하는 멘토의 직종", OCCUPATION_MAJORS)
-    interests = st.multiselect("취미", HOBBIES)
+    desired_current_occ = st.multiselect("관심 있는 현재 직종", CURRENT_OCCUPATIONS)
+    pref_majors = st.multiselect("선호 전공계열(멘토 전공)", OCCUPATION_MAJORS)
+    interests = st.multiselect("관심사/취미", HOBBIES)
 
-    # (선택) 지적 관심사/소통 스타일 입력만 받고 현재 점수에는 미사용
-    intel = st.multiselect("지적 관심사", INTELLECTUAL_INTERESTS)
-    comms = st.multiselect("소통 스타일", COMMUNICATION_STYLES)
-
+    # 메모
     note = st.text_area("한 줄 요청사항", max_chars=120, placeholder="예) 간호사 퇴직하신 선배님을 찾습니다!")
 
     submitted = st.form_submit_button("추천 멘토 보기", use_container_width=True)
@@ -298,11 +235,10 @@ if not submitted:
     st.info("설문을 입력하고 '추천 멘토 보기'를 눌러주세요.")
     st.stop()
 
-# 멘티 프로필 정리
+# 멘티 프로필 정리 (변수명 유지)
 mapped_majors = map_current_occ_to_majors(set(desired_current_occ))
 mentee = {
     "purpose": set(purpose),
-    "topics": set(topics),
     "interests": set(interests),
     "note": note,
     "pref_majors": set(pref_majors),
@@ -329,17 +265,22 @@ for i, item in enumerate(ranked, start=1):
     r = mentors_df.loc[item["idx"]]
     with st.container(border=True):
         st.markdown(f"### #{i}. {r.get('name','(이름없음)')} · {r.get('age_band','')}")
-        st.write(f"**현재 직종(전공계열):** {r.get('occupation_major','')}")
+        st.write(f"**현재 직종(전공계열):** {r.get('current_occupation','(미기재)')} / {r.get('occupation_major','(미기재)')}")
+        # communication_style 컬럼이 있으면 표시
+        if "communication_style" in mentors_df.columns:
+            st.write(f"**소통 스타일:** {r.get('communication_style','')}")
         st.write(f"**소개:** {r.get('intro','')}")
-        st.write(f"**멘토 강점:** 목적({r.get('purpose','')}) · 관심사({r.get('interests','')}) · 주제({r.get('topic_prefs','')})")
+        st.write(f"**멘토 강점:** 목적({r.get('purpose','')}) · 관심사({r.get('interests','')})")
         st.write(f"**매칭 점수:** {item['score']}")
-        if mentee["pref_majors"] or mentee["mapped_majors"]:
-            want = []
-            if mentee["pref_majors"]:
-                want.append("선호 전공계열: " + ", ".join(sorted(mentee['pref_majors'])))
-            if mentee["mapped_majors"]:
-                want.append("현재 직종(선택)→전공계열: " + ", ".join(sorted(mentee['mapped_majors'])))
+        # 멘티가 고른 의도도 표시
+        want = []
+        if mentee["pref_majors"]:
+            want.append("선호 전공계열: " + ", ".join(sorted(mentee["pref_majors"])))
+        if mentee["mapped_majors"]:
+            want.append("현재 직종(선택)→전공계열: " + ", ".join(sorted(mentee["mapped_majors"])))
+        if want:
             st.caption(" · ".join(want))
+
         if st.button(f"💬 {r.get('name','')} 님에게 대화 신청하기", key=f"chat_{i}", use_container_width=True):
             if any(req["mentor"] == r.get("name","") for req in st.session_state["chat_requests"]):
                 st.warning("이미 신청한 멘토입니다.")
