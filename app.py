@@ -351,7 +351,7 @@ def main():
         st.markdown(
             f"""
             <script>
-                window.open('{GOOGLE_MEET_URL}', '_blank');
+                window.open('{https://meet.google.com/urw-iods-puy}', '_blank');
             </script>
             """, 
             unsafe_allow_html=True
