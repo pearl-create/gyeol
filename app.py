@@ -5,89 +5,15 @@ import time
 import os
 
 # --- 1. 데이터 로드 및 상수 정의 ---
-# --- 강화된 Streamlit 호환 CSS ---
-CUSTOM_CSS = """
-<style>
-    /* 전체 페이지 */
-    [data-testid="stAppViewContainer"] {
-        background: linear-gradient(180deg, #fff8f3 0%, #fff 100%);
-        font-family: 'Pretendard', 'Noto Sans KR', sans-serif;
-        color: #4e342e;
-    }
-
-    /* 사이드바 */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #fbe9e7 0%, #fff3e0 100%);
-        border-right: 1px solid #f5e6dc;
-    }
-
-    /* 제목 스타일 */
-    h1, h2, h3, h4 {
-        color: #6d4c41;
-        font-weight: 700;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.08);
-    }
-
-    /* 버튼 */
-    button[kind="primary"], div.stButton > button {
-        background: linear-gradient(90deg, #ffccbc, #ffe0b2);
-        color: #4e342e;
-        font-weight: 600;
-        border: none;
-        border-radius: 12px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.15);
-        transition: 0.3s ease;
-    }
-    button[kind="primary"]:hover, div.stButton > button:hover {
-        background: linear-gradient(90deg, #ffab91, #ffd180);
-        transform: scale(1.03);
-    }
-
-    /* 입력창 */
-    input, textarea, select {
-        background-color: #fffdfa !important;
-        border: 1px solid #f0d9c9 !important;
-        border-radius: 10px !important;
-        color: #4e342e !important;
-    }
-
-    /* 구분선 */
-    hr {
-        border: none;
-        height: 1px;
-        background: linear-gradient(to right, transparent, #ffccbc, transparent);
-        margin: 1.2rem 0;
-    }
-
-    /* 카드 컨테이너 */
-    .stMarkdown div, .stContainer {
-        background: rgba(255,255,255,0.75);
-        border-radius: 16px;
-        border: 1px solid #f3e6df;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.05);
-        padding: 20px;
-    }
-
-    /* 성공 메시지 */
-    [data-testid="stSuccess"] {
-        background: rgba(255, 243, 224, 0.8);
-        border-left: 5px solid #ffab91;
-        color: #4e342e;
-    }
-</style>
-"""
-
-# main() 함수 내 가장 처음에 추가
-def main():
-    st.set_page_config(page_title="세대 간 멘토링 플랫폼", layout="wide")
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 # 멘토 데이터 파일 경로 (사용자 업로드 파일)
 MENTOR_CSV_PATH = "멘토더미.csv"
+# 로고 이미지 파일 경로 (사용하실 이미지 파일명으로 변경하세요)
+LOGO_PATH = "logo.png" 
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
 GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy" 
 
-# --- 상수 및 옵션 정의 (회원가입 폼에 사용) ---
+# --- 상수 및 옵션 정의 (이전과 동일) ---
 GENDERS = ["남", "여", "기타"]
 COMM_METHODS = ["대면 만남", "화상채팅", "일반 채팅"]
 WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
@@ -131,29 +57,22 @@ COMM_STYLES = {
     "냉철한 조언자형": "논리적이고 문제 해결 중심으로 조언을 주는 편이에요."
 }
 
-# --- 2. 데이터 초기화 및 로드 ---
+# --- 2. 데이터 초기화 및 로드 (이전과 동일) ---
 
 @st.cache_data
 def load_mentor_data():
-    """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다."""
     if os.path.exists(MENTOR_CSV_PATH):
         try:
             df = pd.read_csv(MENTOR_CSV_PATH, encoding='utf-8')
             df.columns = df.columns.str.strip() 
-            
-            # 실제 파일 컬럼명에 맞게 required_cols를 업데이트
             required_cols = ['name', 'age_band', 'occupation_major', 'topic_prefs', 'style', 'intro'] 
-            
             missing_cols = [col for col in required_cols if col not in df.columns]
-
             if missing_cols:
                 st.error(f"멘토 CSV 파일에 다음 컬럼이 누락되었습니다: {', '.join(missing_cols)}")
                 st.info(f"현재 파일의 컬럼 목록: {', '.join(df.columns)}")
                 return pd.DataFrame() 
-
             return df
         except UnicodeDecodeError:
-            st.warning("CSV 파일 인코딩 오류가 발생했습니다. 'cp949'로 재시도합니다.")
             try:
                 df = pd.read_csv(MENTOR_CSV_PATH, encoding='cp949')
                 df.columns = df.columns.str.strip()
@@ -170,9 +89,7 @@ def load_mentor_data():
 
 def initialize_session_state():
     mentors_df = load_mentor_data()
-    
     st.session_state.mentors_df = mentors_df
-    
     if 'is_registered' not in st.session_state:
         st.session_state.is_registered = False
     if 'user_profile' not in st.session_state:
@@ -182,29 +99,25 @@ def initialize_session_state():
     
 initialize_session_state()
 
-# 멘토 데이터 로드 실패 시 강제 종료
 if st.session_state.mentors_df.empty and not st.session_state.is_registered:
     st.stop()
     
-# --- 3. 멘토 추천 로직 함수 (컬럼 이름 'style'로 수정) ---
+# --- 3. 멘토 추천 로직 함수 (이전과 동일) ---
 
 def recommend_mentors(search_field, search_topic, search_style):
-    """멘티의 희망 조건에 따라 멘토를 점수 기반으로 추천합니다."""
-    
     mentors = st.session_state.mentors_df.copy()
     mentors['score'] = 0
     
-    # 1. 희망 분야 (occupation_major) 매칭: 3점
+    # occupation_major 필터링: CSV의 값과 OCCUPATION_GROUPS의 키를 매칭해야 함
+    # 멘토 데이터는 'occupation_major' 컬럼에 OCCUPATION_GROUPS의 키 값이 저장되어 있다고 가정합니다.
     if search_field:
         mentors['score'] += mentors['occupation_major'].apply(lambda x: 3 if x == search_field else 0)
     
-    # 2. 희망 주제 (topic_prefs) 매칭: 2점
     if search_topic:
         mentors['score'] += mentors['topic_prefs'].astype(str).apply(
             lambda x: 2 if search_topic in x else 0
         )
     
-    # 3. 희망 대화 스타일 ('style' 컬럼으로 수정) 매칭: 1점
     if search_style:
         mentors['score'] += mentors['style'].apply(lambda x: 1 if search_style in x else 0)
     
@@ -220,7 +133,6 @@ def recommend_mentors(search_field, search_topic, search_style):
 
 def show_registration_form():
     """회원 가입 폼을 표시합니다."""
-    st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻")
     st.header("👤 회원 가입 (멘티/멘토 등록)")
     
     with st.form("registration_form"):
@@ -301,13 +213,12 @@ def show_mentor_search_and_connect():
         
         # 멘토 데이터에서 사용 가능한 옵션 추출
         available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
-        available_styles = sorted(list(COMM_STYLES.keys())) # 회원가입 폼 기준의 깔끔한 스타일 키 사용
-        
-        # **수정 핵심:** 전문 분야를 깔끔하게 항목화된 OCCUPATION_GROUPS의 키를 사용
+        available_styles = sorted(list(COMM_STYLES.keys())) 
         available_fields_clean = sorted(list(OCCUPATION_GROUPS.keys()))
         
         with col_f:
-            search_field = st.selectbox("💼 전문 분야", options=['(전체)'] + available_fields_clean)
+            # **수정 핵심:** 직종 분류를 드롭다운으로 사용
+            search_field = st.selectbox("💼 전문 분야 (직종 분류)", options=['(전체)'] + available_fields_clean)
         
         with col_t:
             search_topic = st.selectbox("💬 주요 대화 주제", options=['(전체)'] + available_topics)
@@ -412,11 +323,11 @@ def main():
         st.error("⚠️ 멘토 데이터를 로드하지 못했습니다. `멘토더미.csv` 파일을 확인해 주세요.")
         st.stop()
 
-    # --- 연결 프로세스 처리 (수정됨) ---
+    # --- 연결 프로세스 처리 ---
     if st.session_state.get('connecting'):
         mentor_name = st.session_state.connect_mentor_name
         
-        st.info(f"🔗 **{mentor_name} 멘토**님과 연결 중입니다. 잠시만 기다려주세요...")
+        st.info(f"🔗 **{mentor_name} 멘토**님과 화상 연결을 준비 중입니다. 잠시만 기다려주세요...")
         time.sleep(2) 
         st.balloons()
         
@@ -430,20 +341,31 @@ def main():
             unsafe_allow_html=True
         )
         
-        # **수정 핵심:** 문구 변경
+        # **수정된 문구:**
         st.success(f"✅ **{mentor_name} 멘토**님과의 화상 채팅 연결이 새로운 탭에서 시작되었습니다.")
-        st.markdown(f"**[바로 연결: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
+        st.markdown(f"**[Google Meet 연결 바로가기: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
         
         st.session_state.connecting = False
         del st.session_state.connect_mentor_name
         st.stop() 
 
 
-    # --- 메인 페이지 흐름 제어 ---
+    # --- 사이드바 및 레이아웃 설정 ---
     
     st.sidebar.title("메뉴")
     
+    # **로고 삽입 코드:** 파일이 존재하면 로고를 사이드바 상단에 표시
+    if os.path.exists(LOGO_PATH):
+        try:
+            st.sidebar.image(LOGO_PATH, use_column_width=True) 
+        except Exception:
+            # 이미지 로드 실패 시 대체 텍스트 표시
+            st.sidebar.markdown("### [로고 이미지]")
+
+    # --- 메인 페이지 흐름 제어 ---
+    
     if not st.session_state.is_registered:
+        st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻") # 로고가 없으므로 제목 유지
         show_registration_form()
     else:
         page = st.sidebar.radio(
