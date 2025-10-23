@@ -8,7 +8,7 @@ import os
 
 # 멘토 데이터 파일 경로 (사용자 업로드 파일)
 MENTOR_CSV_PATH = "멘토더미.csv"
-# 가상의 화상 채팅 연결 URL
+# 가상의 화상 채팅 연결 URL (실제 연결될 URL)
 GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy" 
 
 # --- 상수 및 옵션 정의 (회원가입 폼에 사용) ---
@@ -33,7 +33,7 @@ OCCUPATION_GROUPS = {
     "농림수산업": "농부 / 축산업 / 어부 / 임업 종사자", "운송/기계": "트럭기사 / 버스기사 / 지게차 운전 / 기계조작원", 
     "운송 관리": "물류 관리자 / 항만·공항 직원", "청소 / 경비": "청소원 / 경비원 / 환경미화원", 
     "단순노무": "일용직 / 공장 단순노무 / 배달원", "학생": "(초·중·고·대학생 / 대학원생)", 
-    "전업주부": "전업주부", "구직자 / 최근 퇴사자 / 프리랜서(임시)": "구직자 / 최근 퇴사자 / 프리랜서(임시)", "기타 (직접 입력)": "기타 (직접 입력)"
+    "전업주부": "전업주부", "구직자 / 최근 퇴사자 / 프리랜서(임시)": "구직자 / 최근 퇴사자 / 프리랜서(임시)", "기타": "기타 (직접 입력)"
 }
 INTERESTS = {
     "여가/취미 관련": ["독서", "음악 감상", "영화/드라마 감상", "게임 (PC/콘솔/모바일)", "운동/스포츠 관람", "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래"],
@@ -65,7 +65,7 @@ def load_mentor_data():
             df = pd.read_csv(MENTOR_CSV_PATH, encoding='utf-8')
             df.columns = df.columns.str.strip() 
             
-            # **수정된 핵심:** 파일 컬럼명에 맞게 required_cols를 업데이트
+            # 실제 파일 컬럼명에 맞게 required_cols를 업데이트
             required_cols = ['name', 'age_band', 'occupation_major', 'topic_prefs', 'style', 'intro'] 
             
             missing_cols = [col for col in required_cols if col not in df.columns]
@@ -92,12 +92,10 @@ def load_mentor_data():
         st.error(f"Error: 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 찾을 수 없습니다. 파일을 업로드하고 다시 시도해 주세요.")
         return pd.DataFrame()
 
-# 세션 상태 초기화
 def initialize_session_state():
     mentors_df = load_mentor_data()
     
-    # 멘토 데이터가 로드된 경우에만 저장
-    st.session_state.mentors_df = mentors_df # 항상 저장 (비어있을 수도 있음)
+    st.session_state.mentors_df = mentors_df
     
     if 'is_registered' not in st.session_state:
         st.session_state.is_registered = False
@@ -226,16 +224,14 @@ def show_mentor_search_and_connect():
         col_f, col_t, col_s = st.columns(3)
         
         # 멘토 데이터에서 사용 가능한 옵션 추출
-        available_fields = sorted(mentors['occupation_major'].unique().tolist())
-        all_topics = set()
-        mentors['topic_prefs'].astype(str).str.split('[,;]').apply(lambda x: all_topics.update([t.strip() for t in x if t.strip()]))
-        available_topics = sorted([t for t in all_topics if t])
+        available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
+        available_styles = sorted(list(COMM_STYLES.keys())) # 회원가입 폼 기준의 깔끔한 스타일 키 사용
         
-        # **수정 핵심:** 'style' 컬럼을 사용하여 옵션 추출
-        available_styles = sorted(mentors['style'].astype(str).str.split(':').str[0].str.strip().unique().tolist())
+        # **수정 핵심:** 전문 분야를 깔끔하게 항목화된 OCCUPATION_GROUPS의 키를 사용
+        available_fields_clean = sorted(list(OCCUPATION_GROUPS.keys()))
         
         with col_f:
-            search_field = st.selectbox("💼 전문 분야", options=['(전체)'] + available_fields)
+            search_field = st.selectbox("💼 전문 분야", options=['(전체)'] + available_fields_clean)
         
         with col_t:
             search_topic = st.selectbox("💬 주요 대화 주제", options=['(전체)'] + available_topics)
@@ -280,7 +276,6 @@ def show_mentor_search_and_connect():
                 with col_m2:
                     st.markdown(f"**주요 주제:** {row['topic_prefs']}")
                 with col_m3:
-                    # **수정 핵심:** 'style' 컬럼 사용
                     st.markdown(f"**소통 스타일:** {row['style']}") 
                     
                 st.markdown(f"**멘토 한마디:** _{row['intro']}_")
@@ -341,13 +336,15 @@ def main():
         st.error("⚠️ 멘토 데이터를 로드하지 못했습니다. `멘토더미.csv` 파일을 확인해 주세요.")
         st.stop()
 
+    # --- 연결 프로세스 처리 (수정됨) ---
     if st.session_state.get('connecting'):
         mentor_name = st.session_state.connect_mentor_name
         
-        st.info(f"🔗 **{mentor_name} 멘토**와 연결을 시도합니다. 잠시만 기다려주세요...")
+        st.info(f"🔗 **{mentor_name} 멘토**님과 연결 중입니다. 잠시만 기다려주세요...")
         time.sleep(2) 
         st.balloons()
         
+        # 새 탭으로 Google Meet URL을 엽니다.
         st.markdown(
             f"""
             <script>
@@ -357,13 +354,17 @@ def main():
             unsafe_allow_html=True
         )
         
-        st.success(f"✅ **{mentor_name} 멘토**와의 화상 채팅이 새로운 탭으로 시작되었습니다. (가상 연결)")
+        # **수정 핵심:** 문구 변경
+        st.success(f"✅ **{mentor_name} 멘토**님과의 화상 채팅 연결이 새로운 탭에서 시작되었습니다.")
+        st.markdown(f"**[바로 연결: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
         
         st.session_state.connecting = False
         del st.session_state.connect_mentor_name
         st.stop() 
 
 
+    # --- 메인 페이지 흐름 제어 ---
+    
     st.sidebar.title("메뉴")
     
     if not st.session_state.is_registered:
