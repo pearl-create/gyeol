@@ -8,12 +8,10 @@ import os
 
 # 멘토 데이터 파일 경로 (사용자 업로드 파일)
 MENTOR_CSV_PATH = "멘토더미.csv"
-# 로고 이미지 파일 경로 (사용하실 이미지 파일명으로 변경하세요)
-LOGO_PATH = "logo.png" 
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
 GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy" 
 
-# --- 상수 및 옵션 정의 (이전과 동일) ---
+# --- 상수 및 옵션 정의 ---
 GENDERS = ["남", "여", "기타"]
 COMM_METHODS = ["대면 만남", "화상채팅", "일반 채팅"]
 WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
@@ -57,16 +55,20 @@ COMM_STYLES = {
     "냉철한 조언자형": "논리적이고 문제 해결 중심으로 조언을 주는 편이에요."
 }
 
-# --- 2. 데이터 초기화 및 로드 (이전과 동일) ---
+# --- 2. 데이터 초기화 및 로드 ---
 
 @st.cache_data
 def load_mentor_data():
+    """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다."""
     if os.path.exists(MENTOR_CSV_PATH):
         try:
             df = pd.read_csv(MENTOR_CSV_PATH, encoding='utf-8')
             df.columns = df.columns.str.strip() 
+            
             required_cols = ['name', 'age_band', 'occupation_major', 'topic_prefs', 'style', 'intro'] 
+            
             missing_cols = [col for col in required_cols if col not in df.columns]
+
             if missing_cols:
                 st.error(f"멘토 CSV 파일에 다음 컬럼이 누락되었습니다: {', '.join(missing_cols)}")
                 st.info(f"현재 파일의 컬럼 목록: {', '.join(df.columns)}")
@@ -84,22 +86,36 @@ def load_mentor_data():
             st.error(f"CSV 파일 로드 중 예상치 못한 오류 발생: {e}")
             return pd.DataFrame()
     else:
-        st.error(f"Error: 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 찾을 수 없습니다. 파일을 업로드하고 다시 시도해 주세요.")
+        st.error(f"Error: 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 찾을 수 없습니다.")
         return pd.DataFrame()
 
 def initialize_session_state():
     mentors_df = load_mentor_data()
     st.session_state.mentors_df = mentors_df
-    if 'is_registered' not in st.session_state:
-        st.session_state.is_registered = False
+    
+    # --- 로그인 및 사용자 관리 관련 상태 추가 ---
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
     if 'user_profile' not in st.session_state:
         st.session_state.user_profile = {}
+    if 'all_users' not in st.session_state: # 등록된 모든 사용자 목록 (Name: Profile)
+        st.session_state.all_users = {}
+    
+    # --- Q&A 누적 관련 상태 추가 ---
+    if 'daily_answers' not in st.session_state:
+        # 초기 더미 데이터 (로그인과 무관하게 항상 표시할 샘플 답변)
+        initial_answers = [
+            {"name": "진오", "age_band": "만 90세 이상", "answer": "너무 서두르지 말고, 꾸준함이 기적을 만든다는 것을 기억해라. 건강이 최고다."},
+            {"name": "다온", "age_band": "만 70세~79세", "answer": "돈보다 경험에 투자하고, 사랑하는 사람들에게 지금 당장 마음을 표현하렴. 후회는 순간이 아닌 나중에 온단다."},
+        ]
+        st.session_state.daily_answers = initial_answers
+        
     if 'recommendations' not in st.session_state:
         st.session_state.recommendations = pd.DataFrame()
     
 initialize_session_state()
 
-if st.session_state.mentors_df.empty and not st.session_state.is_registered:
+if st.session_state.mentors_df.empty and not st.session_state.logged_in:
     st.stop()
     
 # --- 3. 멘토 추천 로직 함수 (이전과 동일) ---
@@ -108,8 +124,6 @@ def recommend_mentors(search_field, search_topic, search_style):
     mentors = st.session_state.mentors_df.copy()
     mentors['score'] = 0
     
-    # occupation_major 필터링: CSV의 값과 OCCUPATION_GROUPS의 키를 매칭해야 함
-    # 멘토 데이터는 'occupation_major' 컬럼에 OCCUPATION_GROUPS의 키 값이 저장되어 있다고 가정합니다.
     if search_field:
         mentors['score'] += mentors['occupation_major'].apply(lambda x: 3 if x == search_field else 0)
     
@@ -129,7 +143,27 @@ def recommend_mentors(search_field, search_topic, search_style):
     return recommended_mentors.reset_index(drop=True)
 
 
-# --- 4. UI 컴포넌트 함수 정의 ---
+# --- 4. 인증/회원가입/UI 함수 정의 ---
+
+def show_login_form():
+    """로그인 폼을 표시합니다."""
+    st.header("🔑 로그인")
+    
+    with st.form("login_form"):
+        name = st.text_input("이름을 입력하세요 (가입 시 사용한 이름)", placeholder="홍길동")
+        
+        submitted = st.form_submit_button("로그인")
+        
+        if submitted:
+            if not name:
+                st.error("이름을 입력해 주세요.")
+            elif name in st.session_state.all_users:
+                st.session_state.user_profile = st.session_state.all_users[name]
+                st.session_state.logged_in = True
+                st.success(f"🎉 {name}님, 환영합니다! 서비스를 시작합니다.")
+                st.rerun()
+            else:
+                st.error(f"'{name}'으로 등록된 회원을 찾을 수 없습니다. 회원 가입을 해주세요.")
 
 def show_registration_form():
     """회원 가입 폼을 표시합니다."""
@@ -137,7 +171,7 @@ def show_registration_form():
     
     with st.form("registration_form"):
         st.subheader("기본 정보")
-        name = st.text_input("이름", placeholder="홍길동")
+        name = st.text_input("이름 (로그인 시 사용됩니다)", placeholder="홍길동")
         gender = st.radio("성별", GENDERS, index=1, horizontal=True)
         age_band = st.selectbox("나이대", AGE_BANDS)
         
@@ -153,15 +187,6 @@ def show_registration_form():
         st.subheader("현재 직종")
         occupation_key = st.selectbox("현재 직종 분류", list(OCCUPATION_GROUPS.keys()))
         
-        st.subheader("관심사, 취향")
-        selected_interests = []
-        for group, interests in INTERESTS.items():
-            st.markdown(f"**{group}**")
-            cols = st.columns(3)
-            for i, interest in enumerate(interests):
-                if cols[i % 3].checkbox(interest, key=f"interest_{interest}"):
-                    selected_interests.append(interest)
-
         st.subheader("선호하는 대화 주제")
         selected_topics = st.multiselect(
             "멘토링에서 주로 어떤 주제에 대해 이야기하고 싶으신가요?", 
@@ -177,14 +202,18 @@ def show_registration_form():
         )
         selected_style = selected_style_full.split(':')[0]
         
+        # 관심사 항목은 생략하고 필수 항목만 체크
+        
         submitted = st.form_submit_button("가입 완료 및 서비스 시작") 
 
         if submitted:
             if not name or not available_days or not available_times or not selected_topics or not selected_style:
                 st.error("이름, 소통 가능 요일/시간, 주제, 소통 스타일은 필수 입력 항목입니다.")
+            elif name in st.session_state.all_users:
+                st.error(f"'{name}' 이름은 이미 등록되어 있습니다. 다른 이름을 사용하거나 로그인해 주세요.")
             else:
-                st.session_state.is_registered = True
-                st.session_state.user_profile = {
+                # 사용자 프로필 저장 및 로그인 처리
+                user_profile_data = {
                     "name": name,
                     "gender": gender,
                     "age_band": age_band,
@@ -192,11 +221,15 @@ def show_registration_form():
                     "available_days": available_days,
                     "available_times": available_times,
                     "occupation_group": occupation_key,
-                    "interests": selected_interests,
                     "topic_prefs": selected_topics,
                     "comm_style": selected_style
                 }
-                st.success(f"🎉 {name}님, 성공적으로 가입되었습니다! 이제 멘토를 찾아보세요.")
+                
+                st.session_state.all_users[name] = user_profile_data
+                st.session_state.user_profile = user_profile_data
+                st.session_state.logged_in = True
+                
+                st.success(f"🎉 {name}님, 성공적으로 가입 및 로그인되었습니다!")
                 st.rerun() 
 
 def show_mentor_search_and_connect():
@@ -211,13 +244,11 @@ def show_mentor_search_and_connect():
     with st.form("mentor_search_form"): 
         col_f, col_t, col_s = st.columns(3)
         
-        # 멘토 데이터에서 사용 가능한 옵션 추출
         available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
-        available_styles = sorted(list(COMM_STYLES.keys())) 
+        available_styles = sorted(list(COMM_STYLES.keys()))
         available_fields_clean = sorted(list(OCCUPATION_GROUPS.keys()))
         
         with col_f:
-            # **수정 핵심:** 직종 분류를 드롭다운으로 사용
             search_field = st.selectbox("💼 전문 분야 (직종 분류)", options=['(전체)'] + available_fields_clean)
         
         with col_t:
@@ -242,7 +273,7 @@ def show_mentor_search_and_connect():
         elif recommendation_results.empty:
             st.info("멘토 데이터가 비어있습니다. 데이터를 확인해 주세요.")
 
-    # --- 검색 결과 표시 ---
+    # --- 검색 결과 표시 (이전과 동일) ---
     if not st.session_state.recommendations.empty:
         st.subheader(f"총 {len(st.session_state.recommendations)}명의 멘토가 검색되었습니다.")
         if 'score' in st.session_state.recommendations.columns:
@@ -278,33 +309,45 @@ def show_mentor_search_and_connect():
 
 
 def show_daily_question():
-    """오늘의 질문 게시판을 표시합니다."""
+    """오늘의 질문 게시판을 표시하고, 답변을 누적하여 보여줍니다."""
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
     
     daily_q = "🤔 **'내가 만약 20대로 돌아간다면, 지금의 나에게 가장 해주고 싶은 조언은 무엇인가요?'**"
     st.subheader(daily_q)
     
-    sample_answers = [
-        {"나이대": "만 90세 이상", "이름": "진오", "답변": "너무 서두르지 말고, 꾸준함이 기적을 만든다는 것을 기억해라. 건강이 최고다."},
-        {"나이대": "만 20세~29세", "이름": st.session_state.user_profile.get('name', '청년 멘티'), "답변": "남들이 간다고 무조건 따라가지 말고, 나만의 속도를 찾는 용기가 필요하다고 말해주고 싶어요."},
-        {"나이대": "만 70세~79세", "이름": "다온", "답변": "돈보다 경험에 투자하고, 사랑하는 사람들에게 지금 당장 마음을 표현하렴. 후회는 순간이 아닌 나중에 온단다."},
-    ]
-    
-    for ans in sample_answers:
-        with st.expander(f"[{ans['나이대']}] {ans['이름']}님의 답변"):
-            st.write(ans['답변'])
+    # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
+    if st.session_state.daily_answers:
+        # 최신 답변이 위로 오도록 역순 정렬
+        sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: 1, reverse=True) 
+        
+        for ans in sorted_answers:
+            with st.expander(f"[{ans['age_band']}] **{ans['name']}**님의 답변"):
+                st.write(ans['answer'])
             
     st.divider()
     
+    # --- 답변 작성 폼 ---
     st.subheader("나의 답변 작성하기")
+    current_name = st.session_state.user_profile.get('name', '익명')
+    current_age = st.session_state.user_profile.get('age_band', '미등록')
+    
     with st.form("answer_form"):
         answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
         submitted = st.form_submit_button("답변 제출")
         
         if submitted:
             if answer_text:
-                st.success("답변이 제출되었습니다. 다른 분들의 답변도 확인해 보세요!")
+                new_answer = {
+                    "name": current_name,
+                    "age_band": current_age,
+                    "answer": answer_text
+                }
+                # 답변을 세션 상태 리스트에 추가하여 누적
+                st.session_state.daily_answers.append(new_answer)
+                
+                st.success("답변이 제출되었습니다. 페이지를 새로고침하면(R 키) 누적된 답변을 볼 수 있습니다.")
+                # st.rerun() # 답변 즉시 반영을 위해 새로고침
             else:
                 st.warning("답변 내용을 입력해 주세요.")
             
@@ -318,7 +361,7 @@ def main():
         initial_sidebar_state="expanded"
     )
 
-    if st.session_state.mentors_df.empty and not st.session_state.is_registered:
+    if st.session_state.mentors_df.empty and not st.session_state.logged_in:
         st.title("👵👴 플랫폼 준비 중 🧑‍💻")
         st.error("⚠️ 멘토 데이터를 로드하지 못했습니다. `멘토더미.csv` 파일을 확인해 주세요.")
         st.stop()
@@ -331,7 +374,6 @@ def main():
         time.sleep(2) 
         st.balloons()
         
-        # 새 탭으로 Google Meet URL을 엽니다.
         st.markdown(
             f"""
             <script>
@@ -341,7 +383,6 @@ def main():
             unsafe_allow_html=True
         )
         
-        # **수정된 문구:**
         st.success(f"✅ **{mentor_name} 멘토**님과의 화상 채팅 연결이 새로운 탭에서 시작되었습니다.")
         st.markdown(f"**[Google Meet 연결 바로가기: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
         
@@ -350,24 +391,20 @@ def main():
         st.stop() 
 
 
-    # --- 사이드바 및 레이아웃 설정 ---
-    
-    st.sidebar.title("메뉴")
-    
-    # **로고 삽입 코드:** 파일이 존재하면 로고를 사이드바 상단에 표시
-    if os.path.exists(LOGO_PATH):
-        try:
-            st.sidebar.image(LOGO_PATH, use_column_width=True) 
-        except Exception:
-            # 이미지 로드 실패 시 대체 텍스트 표시
-            st.sidebar.markdown("### [로고 이미지]")
-
     # --- 메인 페이지 흐름 제어 ---
-    
-    if not st.session_state.is_registered:
-        st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻") # 로고가 없으므로 제목 유지
-        show_registration_form()
+    st.sidebar.title("메뉴")
+    st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻")
+
+    if not st.session_state.logged_in:
+        # 로그인/회원가입 선택
+        auth_option = st.radio("서비스 시작", ["로그인", "회원 가입"], index=0, horizontal=True)
+        if auth_option == "로그인":
+            show_login_form()
+        else:
+            show_registration_form()
+            
     else:
+        # 로그인된 사용자용 메인 화면
         page = st.sidebar.radio(
             "페이지 이동",
             ["멘토 찾기", "오늘의 질문"],
@@ -378,7 +415,11 @@ def main():
         st.sidebar.markdown(f"**환영합니다, {st.session_state.user_profile.get('name')}님!**")
         st.sidebar.caption(f"나이대: {st.session_state.user_profile.get('age_band')}")
         
-        st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻")
+        if st.sidebar.button("🚪 로그아웃"):
+            st.session_state.logged_in = False
+            st.session_state.user_profile = {}
+            st.info("로그아웃되었습니다.")
+            st.rerun()
 
         if page == "멘토 찾기":
             show_mentor_search_and_connect()
