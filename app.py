@@ -29,8 +29,28 @@ from typing import List, Dict, Any, Optional, Tuple
 # =========================
 # 0) 상수/유틸
 # =========================
-DB_PATH = Path("/mnt/data/gyeol.db")
-MENTOR_CSV = Path("/mnt/data/멘토더미.csv")
+# ---- 데이터 디렉터리 자동 해상 (권한 이슈 대비) ----
+def _resolve_data_dir() -> Path:
+    candidates = [Path("/mnt/data"), Path.cwd() / "data", Path.cwd()]
+    for d in candidates:
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            t = d / ".write_test"
+            t.write_text("ok", encoding="utf-8")
+            t.unlink(missing_ok=True)
+            return d
+        except Exception:
+            continue
+    import tempfile
+    d = Path(tempfile.gettempdir()) / "gyeol"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+DATA_DIR = _resolve_data_dir()
+DB_PATH = DATA_DIR / "gyeol.db"
+# 멘토 CSV 후보 경로 탐색
+_csv_candidates = [Path("/mnt/data/멘토더미.csv"), DATA_DIR / "멘토더미.csv", Path.cwd() / "멘토더미.csv"]
+MENTOR_CSV = next((p for p in _csv_candidates if p.exists()), _csv_candidates[0])
 KST = pytz.timezone("Asia/Seoul")
 MEET_LINK = "https://meet.google.com/urw-iods-puy"  # 고정 링크 유지
 
@@ -120,7 +140,7 @@ DAILY_QUESTION_SEED = [
 # 1) DB 초기화
 # =========================
 def get_conn() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # 경로 생성은 상단에서 보장됨
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
