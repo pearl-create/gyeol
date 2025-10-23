@@ -1,403 +1,806 @@
-import streamlit as st
+# app.py
+# -*- coding: utf-8 -*-
+"""
+결(結) — 멘티 전용 매칭/검색 + 오늘의 질문 + 신고 시스템 (MVP)
+- 프레임워크: Streamlit (단일 파일)
+- 저장: SQLite (/mnt/data/gyeol.db)
+- 멘토 데이터: /mnt/data/멘토더미.csv (UTF-8-SIG 우선, CP949 폴백)
+- 핵심 기능:
+  1) 멘티 회원가입(필드: 성별에 "밝히고 싶지 않음" 포함, 다중 태그 입력)
+  2) 멘토 검색(필터 + 키워드) → <연결> → "잠시만 기다려주세요" → 고정 미트 링크 이동
+  3) 오늘의 질문(매일 09:00 KST 자동 생성/로테이션) + 답변 + 공감 + 신고
+  4) 신고 시스템(멘토 카드/답변 신고, 관리자 검토 전제 — 자동 블러 없음)
+- 톤: 따뜻한 연결
+
+주의: 배포 환경에서 외부 링크 자동 이동은 브라우저 보안정책에 따라 팝업 허용이 필요할 수 있습니다.
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import datetime, date, time, timedelta
+from pathlib import Path
+
 import pandas as pd
-import random
-import time
-import os
+import pytz
+import streamlit as st
+from typing import List, Dict, Any, Optional, Tuple
 
-# --- 1. 데이터 로드 및 상수 정의 ---
+# =========================
+# 0) 상수/유틸
+# =========================
+DB_PATH = Path("/mnt/data/gyeol.db")
+MENTOR_CSV = Path("/mnt/data/멘토더미.csv")
+KST = pytz.timezone("Asia/Seoul")
+MEET_LINK = "https://meet.google.com/urw-iods-puy"  # 고정 링크 유지
 
-# 멘토 데이터 파일 경로 (사용자 업로드 파일)
-MENTOR_CSV_PATH = "멘토더미.csv"
-# 가상의 화상 채팅 연결 URL
-GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy" 
-
-# --- 상수 및 옵션 정의 (회원가입 폼에 사용) ---
-
-GENDERS = ["남", "여", "기타"]
-COMM_METHODS = ["대면 만남", "화상채팅", "일반 채팅"]
-WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
-TIMES = ["오전", "오후", "저녁", "밤"]
+GENDERS = ["남", "여", "기타", "밝히고 싶지 않음"]
 AGE_BANDS = [
-    "만 13세~19세", "만 20세~29세", "만 30세~39세", 
-    "만 40세~49세", "만 50세~59세", "만 60세~69세", 
-    "만 70세~79세", "만 80세~89세", "만 90세 이상"
+    "만 13세~19세",
+    "만 20세~29세",
+    "만 30세~39세",
+    "만 40세~49세",
+    "만 50세~59세",
+    "만 60세~69세",
+    "만 70세~79세",
+    "만 80세~89세",
+    "만 90세 이상",
+]
+CHANNELS = ["대면 만남", "화상채팅", "일반 채팅"]
+DAYS = ["월", "화", "수", "목", "금", "토", "일"]
+TIMES = ["오전", "오후", "저녁", "밤"]
+
+# 직업군(대분류)
+OCCUP_MAIN = [
+    "경영자",
+    "행정관리",
+    "의학/보건",
+    "법률/행정",
+    "교육",
+    "연구개발/ IT",
+    "예술/디자인",
+    "기술/기능",
+    "서비스 전문",
+    "일반 사무",
+    "영업 원",
+    "판매",
+    "서비스",
+    "의료/보건 서비스",
+    "생산/제조",
+    "건설/시설",
+    "농림수산업",
+    "운송/기계",
+    "운송 관리",
+    "청소 / 경비",
+    "단순노무",
+    "학생",
+    "전업주부",
+    "구직자 / 최근 퇴사자 / 프리랜서(임시)",
+    "기타 (직접 입력)",
 ]
 
-OCCUPATION_GROUPS = {
-    "경영자": "CEO / 사업주 / 임원 / 부서장",
-    "행정관리": "공공기관 관리자 / 기업 행정팀장 / 프로젝트 매니저",
-    "의학/보건": "의사 / 치과의사 / 약사 / 간호사 / 한의사 / 물리치료사",
-    "법률/행정": "변호사 / 판사 / 검사 / 세무사 / 행정사",
-    "교육": "교수 / 교사 / 학원강사 / 연구원",
-    "연구개발/ IT": "엔지니어 / 연구원 / 소프트웨어 개발자 / 데이터 분석가",
-    "예술/디자인": "디자이너 / 예술가 / 작가 / 사진작가",
-    "기술/기능": "기술자 / 공학 기술자 / 실험실 기술자 / 회계사 / 건축기사",
-    "서비스 전문": "상담사 / 심리치료사 / 사회복지사 / 코디네이터",
-    "일반 사무": "사무직원 / 경리 / 비서 / 고객 상담 / 문서 관리",
-    "영업 원": "영업사원 / 마케팅 지원 / 고객 관리",
-    "판매": "점원 / 슈퍼 / 편의점 직원 / 백화점 직원",
-    "서비스": "접객원 / 안내원 / 호텔리어 / 미용사 / 요리사",
-    "의료/보건 서비스": "간호조무사 / 재활치료사 / 요양보호사",
-    "생산/제조": "공장 생산직 / 조립공 / 기계조작원 / 용접공",
-    "건설/시설": "배관공 / 전기공 / 건설노무자 / 목수",
-    "농림수산업": "농부 / 축산업 / 어부 / 임업 종사자",
-    "운송/기계": "트럭기사 / 버스기사 / 지게차 운전 / 기계조작원",
-    "운송 관리": "물류 관리자 / 항만·공항 직원",
-    "청소 / 경비": "청소원 / 경비원 / 환경미화원",
-    "단순노무": "일용직 / 공장 단순노무 / 배달원",
-    "학생": "(초·중·고·대학생 / 대학원생)",
-    "전업주부": "전업주부",
-    "구직자 / 최근 퇴사자 / 프리랜서(임시)": "구직자 / 최근 퇴사자 / 프리랜서(임시)",
-    "기타 (직접 입력)": "기타 (직접 입력)"
+# 관심사 태그 (카테고리별)
+INTEREST_TAGS = {
+    "여가/취미": [
+        "독서", "음악 감상", "영화/드라마 감상", "게임", "운동/스포츠 관람",
+        "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래",
+    ],
+    "학문/지적": [
+        "인문학", "사회과학", "자연과학", "수학/논리 퍼즐", "IT/테크놀로지", "환경/지속가능성",
+    ],
+    "라이프스타일": [
+        "패션/뷰티", "건강/웰빙", "자기계발", "사회참여/봉사활동", "재테크/투자", "반려동물",
+    ],
+    "대중문화": [
+        "K-POP", "아이돌/연예인", "유튜브/스트리밍", "웹툰/웹소설", "스포츠 스타",
+    ],
+    "성향": [
+        "혼자 보내는 시간 선호", "친구들과 어울리기 선호", "실내 활동 선호", "야외 활동 선호",
+        "새로움 추구", "안정감 추구",
+    ],
 }
 
-INTERESTS = {
-    "여가/취미 관련": ["독서", "음악 감상", "영화/드라마 감상", "게임 (PC/콘솔/모바일)", "운동/스포츠 관람", "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래"],
-    "학문/지적 관심사": ["인문학 (철학, 역사, 문학 등)", "사회과학 (정치, 경제, 사회, 심리 등)", "자연과학 (물리, 화학, 생명과학 등)", "수학/논리 퍼즐", "IT/테크놀로지 (AI, 코딩, 로봇 등)", "환경/지속가능성"],
-    "라이프스타일": ["패션/뷰티", "건강/웰빙", "자기계발", "사회참여/봉사활동", "재테크/투자", "반려동물"],
-    "대중문화": ["K-POP", "아이돌/연예인", "유튜브/스트리밍", "웹툰/웹소설", "스포츠 스타"],
-    "특별한 취향/성향": ["혼자 보내는 시간 선호", "친구들과 어울리기 선호", "실내 활동 선호", "야외 활동 선호", "새로움 추구 vs 안정감 추구"]
-}
-
-TOPIC_PREFS = [
-    "진로·직업", "학업·전문 지식", "인생 경험·삶의 가치관", 
-    "대중문화·취미", "사회 문제·시사", "건강·웰빙"
+TOPIC_CHOICES = [
+    "진로·직업", "학업·전문 지식", "인생 경험·삶의 가치관", "대중문화·취미", "사회 문제·시사", "건강·웰빙",
 ]
 
-COMM_STYLES = {
-    "연두부형": "조용하고 차분하게, 상대방 얘기를 경청하며 공감해 주는 편이에요.",
-    "분위기메이커형": "활발하고 에너지가 넘쳐 대화를 이끌어가는 편이에요.",
-    "효율추구형": "주제를 체계적으로 정리하고 목표 지향적으로 대화하는 편이에요.",
-    "댕댕이형": "자유롭고 편안하게, 즉흥적으로 대화를 이어가는 편이에요.",
-    "감성 충만형": "감성적인 대화를 좋아하고 위로와 지지를 주는 편이에요.",
-    "냉철한 조언자형": "논리적이고 문제 해결 중심으로 조언을 주는 편이에요."
-}
+STYLE_TYPES = [
+    "연두부형", "분위기메이커형", "효율추구형", "댕댕이형", "감성 충만형", "냉철한 조언자형",
+]
 
-# --- 2. 데이터 초기화 및 로드 ---
+DAILY_QUESTION_SEED = [
+    "요즘 당신에게 가장 필요한 한 마디는 무엇인가요?",
+    "10년 전의 나에게 한 문장 조언을 보낸다면?",
+    "가장 기억에 남는 멘토의 한마디는 무엇이었나요?",
+    "최근에 작게나마 용기 냈던 순간을 들려주세요.",
+    "마음이 힘들 때 당신을 버티게 하는 루틴은?",
+]
 
-# 앱 실행 시 멘토 데이터 로드 및 세션 상태 초기화
-@st.cache_data
-def load_mentor_data():
-    """CSV 파일에서 멘토 데이터를 로드합니다."""
-    if os.path.exists(MENTOR_CSV_PATH):
-        return pd.read_csv(MENTOR_CSV_PATH)
-    else:
-        st.error(f"Error: 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 찾을 수 없습니다. 파일을 업로드하고 다시 시도해 주세요.")
+# =========================
+# 1) DB 초기화
+# =========================
+def get_conn() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                gender TEXT,
+                age_band TEXT,
+                preferred_channels TEXT,
+                available_days TEXT,
+                available_times TEXT,
+                occupations_main TEXT,
+                occupations_detail TEXT,
+                occupation_other TEXT,
+                interests TEXT,
+                topics TEXT,
+                style_primary TEXT,
+                help_text TEXT,
+                created_at TEXT,
+                status TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mentors (
+                mentor_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                headline TEXT,
+                photo_url TEXT,
+                occupations_main TEXT,
+                occupations_detail TEXT,
+                channels TEXT,
+                available_days TEXT,
+                available_times TEXT,
+                interests TEXT,
+                style_tags TEXT,
+                bio TEXT,
+                meet_link TEXT,
+                is_published INTEGER,
+                updated_at TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS connect_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                mentor_id INTEGER,
+                created_at TEXT,
+                search_context TEXT,
+                redirect_link TEXT,
+                status TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS daily_questions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                qdate TEXT,
+                text TEXT,
+                author TEXT,
+                status TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS daily_answers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question_id INTEGER,
+                user_id INTEGER,
+                age_band TEXT,
+                text TEXT,
+                likes INTEGER DEFAULT 0,
+                reports INTEGER DEFAULT 0,
+                visibility TEXT DEFAULT 'ok',
+                created_at TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                target_type TEXT,  -- 'mentor' | 'answer'
+                target_id INTEGER,
+                user_id INTEGER,
+                reason TEXT,
+                created_at TEXT,
+                status TEXT DEFAULT 'pending'
+            )
+            """
+        )
+        conn.commit()
+
+
+# =========================
+# 2) 멘토 CSV 로드 (초기 로딩 전용)
+# =========================
+def safe_read_csv(path: Path) -> pd.DataFrame:
+    if not path.exists():
         return pd.DataFrame()
-
-# 세션 상태 초기화
-def initialize_session_state():
-    mentors_df = load_mentor_data()
-    
-    if 'mentors_df' not in st.session_state:
-        st.session_state.mentors_df = mentors_df
-    if 'is_registered' not in st.session_state:
-        st.session_state.is_registered = False
-    if 'user_profile' not in st.session_state:
-        st.session_state.user_profile = {}
-    if 'recommendations' not in st.session_state:
-        st.session_state.recommendations = pd.DataFrame() # 초기 추천 결과
-    
-# 초기화 함수 호출
-initialize_session_state()
-
-# 멘토 데이터가 로드되지 않았으면 앱 실행 중지
-if st.session_state.mentors_df.empty and not st.session_state.is_registered:
-    st.stop()
-    
-# --- 3. 멘토 추천 로직 함수 ---
-
-def recommend_mentors(search_field, search_topic, search_style):
-    """멘티의 희망 조건에 따라 멘토를 점수 기반으로 추천합니다."""
-    
-    mentors = st.session_state.mentors_df.copy()
-    mentors['score'] = 0
-    
-    # 1. 희망 분야 (occupation_major) 매칭: 3점
-    if search_field:
-        mentors['score'] += mentors['occupation_major'].apply(lambda x: 3 if x == search_field else 0)
-    
-    # 2. 희망 주제 (topic_prefs) 매칭: 2점
-    if search_topic:
-        mentors['score'] += mentors['topic_prefs'].astype(str).apply(
-            lambda x: 2 if search_topic in x else 0
-        )
-    
-    # 3. 희망 대화 스타일 (communication_style) 매칭: 1점
-    if search_style:
-        mentors['score'] += mentors['communication_style'].apply(lambda x: 1 if x == search_style else 0)
-    
-    # 필터링 및 정렬
-    if search_field or search_topic or search_style:
-        # 조건이 하나라도 있으면 점수가 0점 이상인 멘토만 추천, 점수 순 정렬
-        recommended_mentors = mentors[mentors['score'] > 0].sort_values(by='score', ascending=False)
-    else:
-        # 모든 조건이 비어있으면, 모든 멘토를 이름순으로 보여줌 (혹은 랜덤하게)
-        recommended_mentors = mentors.sort_values(by='name', ascending=True)
-
-    return recommended_mentors.reset_index(drop=True)
+    try:
+        return pd.read_csv(path, encoding="utf-8-sig")
+    except Exception:
+        try:
+            return pd.read_csv(path, encoding="cp949")
+        except Exception:
+            return pd.read_csv(path, engine="python")
 
 
-# --- 4. UI 컴포넌트 함수 정의 ---
+def seed_mentors_if_empty():
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) AS c FROM mentors")
+        c = cur.fetchone()[0]
+        if c > 0:
+            return
 
-def show_registration_form():
-    """회원 가입 폼을 표시합니다."""
-    st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻")
-    st.header("👤 회원 가입 (멘티/멘토 등록)")
-    
-    with st.form("registration_form"):
-        st.subheader("기본 정보")
-        name = st.text_input("이름", placeholder="홍길동")
-        gender = st.radio("성별", GENDERS, index=1, horizontal=True)
-        age_band = st.selectbox("나이대", AGE_BANDS)
-        
-        st.subheader("소통 환경")
-        comm_method = st.radio("선호하는 소통 방법", COMM_METHODS, horizontal=True)
-        
-        col_day, col_time = st.columns(2)
-        with col_day:
-            available_days = st.multiselect("소통 가능한 요일", WEEKDAYS)
-        with col_time:
-            available_times = st.multiselect("소통 가능한 시간대", TIMES)
-        
+    df = safe_read_csv(MENTOR_CSV)
+    if df.empty:
+        return
+
+    # 컬럼 추정(유연하게 매핑)
+    colmap = {
+        'name': None,
+        'headline': None,
+        'photo_url': None,
+        'occupations_main': None,
+        'occupations_detail': None,
+        'channels': None,
+        'available_days': None,
+        'available_times': None,
+        'interests': None,
+        'style_tags': None,
+        'bio': None,
+        'meet_link': None,
+    }
+    # 가능한 한국어 컬럼 후보들
+    candidates = {
+        'name': ["이름", "name", "성명"],
+        'headline': ["한줄소개", "소개", "headline"],
+        'photo_url': ["사진", "이미지", "photo_url", "image"],
+        'occupations_main': ["직업대분류", "직업군", "occupations_main"],
+        'occupations_detail': ["직무", "세부직무", "occupations_detail"],
+        'channels': ["소통채널", "채널", "channels"],
+        'available_days': ["가능요일", "요일", "available_days"],
+        'available_times': ["가능시간대", "시간대", "available_times"],
+        'interests': ["관심사", "태그", "interests"],
+        'style_tags': ["스타일", "style_tags"],
+        'bio': ["자기소개", "bio"],
+        'meet_link': ["미트링크", "meet_link"],
+    }
+
+    for k, cand in candidates.items():
+        for c in cand:
+            if c in df.columns:
+                colmap[k] = c
+                break
+
+    records = []
+    for _, row in df.iterrows():
+        rec = {
+            'name': str(row.get(colmap['name'], '') or ''),
+            'headline': str(row.get(colmap['headline'], '') or ''),
+            'photo_url': str(row.get(colmap['photo_url'], '') or ''),
+            'occupations_main': str(row.get(colmap['occupations_main'], '') or ''),
+            'occupations_detail': str(row.get(colmap['occupations_detail'], '') or ''),
+            'channels': str(row.get(colmap['channels'], '') or ''),
+            'available_days': str(row.get(colmap['available_days'], '') or ''),
+            'available_times': str(row.get(colmap['available_times'], '') or ''),
+            'interests': str(row.get(colmap['interests'], '') or ''),
+            'style_tags': str(row.get(colmap['style_tags'], '') or ''),
+            'bio': str(row.get(colmap['bio'], '') or ''),
+            'meet_link': str(row.get(colmap['meet_link'], '') or ''),
+        }
+        records.append(rec)
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        for r in records:
+            cur.execute(
+                """
+                INSERT INTO mentors (
+                    name, headline, photo_url, occupations_main, occupations_detail,
+                    channels, available_days, available_times, interests, style_tags,
+                    bio, meet_link, is_published, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    r['name'], r['headline'], r['photo_url'], r['occupations_main'], r['occupations_detail'],
+                    r['channels'], r['available_days'], r['available_times'], r['interests'], r['style_tags'],
+                    r['bio'], r['meet_link'] or MEET_LINK, datetime.now(KST).isoformat(),
+                ),
+            )
+        conn.commit()
+
+
+# =========================
+# 3) 헬퍼: 직렬화/역직렬화
+# =========================
+def to_json(obj: Any) -> str:
+    try:
+        return json.dumps(obj, ensure_ascii=False)
+    except Exception:
+        return "{}"
+
+
+def from_json(s: Optional[str]) -> Any:
+    if not s:
+        return None
+    try:
+        return json.loads(s)
+    except Exception:
+        return None
+
+
+# =========================
+# 4) UI 스타일
+# =========================
+WARM_CSS = f"""
+<style>
+    .stApp {{
+        background: linear-gradient(180deg, #fffaf7 0%, #fff 100%);
+        font-family: 'Pretendard', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
+    }}
+    .warm-card {{
+        background: rgba(255, 255, 255, 0.75);
+        backdrop-filter: blur(6px);
+        border: 1px solid #f3e6df;
+        border-radius: 18px;
+        padding: 16px 18px;
+        box-shadow: 0 8px 24px rgba(119, 60, 20, 0.06);
+        margin-bottom: 12px;
+    }}
+    .warm-title {{
+        color: #7b3e19;
+        font-weight: 700;
+    }}
+    .muted {{ color: #8e705f; }}
+    .tag {{
+        display:inline-block; padding:4px 10px; border-radius:12px; margin: 2px; font-size:12px;
+        background:#fff2ea; color:#7b3e19; border:1px solid #f3e6df;
+    }}
+    .pill {{
+        display:inline-block; padding:4px 10px; border-radius:999px; margin: 2px; font-size:12px;
+        background:#eaf6f1; color:#1f6b54; border:1px solid #d5eee4;
+    }}
+</style>
+"""
+
+# =========================
+# 5) 페이지 구성
+# =========================
+
+def nav():
+    st.sidebar.title("결 · 멘티")
+    pg = st.sidebar.radio(
+        "이동",
+        ["홈", "회원가입", "멘토 검색", "오늘의 질문", "신고"],
+    )
+    return pg
+
+
+# ---------- 회원가입 ----------
+
+def page_signup():
+    st.markdown("<h2 class='warm-title'>당신의 이야기가 누군가의 길잡이가 됩니다</h2>", unsafe_allow_html=True)
+    st.write("아래 정보를 한 번만 입력하면, 언제든 수정할 수 있어요.")
+
+    with st.form("signup_form", clear_on_submit=False):
+        name = st.text_input("이름", max_chars=50)
+        gender = st.selectbox("성별", GENDERS, index=0)
+        age = st.selectbox("나이대", AGE_BANDS, index=0)
+
+        st.markdown("---")
+        st.subheader("소통 선호 & 가능 시간")
+        ch = st.multiselect("선호하는 소통 방법", CHANNELS, default=["일반 채팅"])  # 다중
+        days = st.multiselect("소통 가능한 요일", DAYS)
+        times = st.multiselect("소통 가능한 시간대", TIMES)
+
+        st.markdown("---")
         st.subheader("현재 직종")
-        occupation_key = st.selectbox("현재 직종 분류", list(OCCUPATION_GROUPS.keys()))
-        
-        st.subheader("관심사, 취향")
-        selected_interests = []
-        for group, interests in INTERESTS.items():
-            st.markdown(f"**{group}**")
-            cols = st.columns(3)
-            for i, interest in enumerate(interests):
-                if cols[i % 3].checkbox(interest, key=f"interest_{interest}"):
-                    selected_interests.append(interest)
+        occ_main = st.multiselect("대분류(복수 선택 가능)", OCCUP_MAIN)
+        occ_detail = st.text_input("세부 직무(쉼표로 복수 입력)")
+        occ_other = st.text_input("기타(자유 입력)")
 
+        st.markdown("---")
+        st.subheader("관심사/취향 (태그)")
+        selected_tags: List[str] = []
+        for cat, tags in INTEREST_TAGS.items():
+            sel = st.multiselect(f"{cat}", tags)
+            selected_tags.extend(sel)
+
+        st.markdown("---")
         st.subheader("선호하는 대화 주제")
-        selected_topics = st.multiselect(
-            "멘토링에서 주로 어떤 주제에 대해 이야기하고 싶으신가요?", 
-            TOPIC_PREFS
-        )
+        topics = st.multiselect("멘토링에서 주로 어떤 주제를 다루고 싶으신가요?", TOPIC_CHOICES)
+        help_text = st.text_area("지금 가장 받고 싶은 도움(선택)", max_chars=500)
 
-        st.subheader("선호하는 소통 스타일")
-        comm_style_options = [f"{k}: {v}" for k, v in COMM_STYLES.items()]
-        selected_style_full = st.radio(
-            "평소 대화 시 본인과 비슷하거나 선호하는 스타일을 선택해주세요", 
-            comm_style_options,
-            key="comm_style_radio"
-        )
-        selected_style = selected_style_full.split(':')[0]
-        
-        submitted = st.form_submit_button("가입 완료 및 서비스 시작")
-        
+        st.markdown("---")
+        st.subheader("소통 스타일")
+        style = st.selectbox("본인과 가장 비슷한 유형 하나를 골라주세요", STYLE_TYPES)
+
+        agree = st.checkbox("커뮤니티 가이드, 개인정보 처리, 외부 링크 안내를 확인했습니다.")
+
+        submitted = st.form_submit_button("저장")
         if submitted:
-            if not name or not available_days or not available_times or not selected_topics or not selected_style:
-                st.error("이름, 소통 가능 요일/시간, 주제, 소통 스타일은 필수 입력 항목입니다.")
+            if not name or not agree:
+                st.error("이름과 약관 동의는 필수입니다.")
             else:
-                st.session_state.is_registered = True
-                st.session_state.user_profile = {
-                    "name": name,
-                    "gender": gender,
-                    "age_band": age_band,
-                    "comm_method": comm_method,
-                    "available_days": available_days,
-                    "available_times": available_times,
-                    "occupation_group": occupation_key,
-                    "interests": selected_interests,
-                    "topic_prefs": selected_topics,
-                    "comm_style": selected_style
-                }
-                st.success(f"🎉 {name}님, 성공적으로 가입되었습니다! 이제 멘토를 찾아보세요.")
-                st.rerun() # 최신 Streamlit 문법 사용
-
-def show_mentor_search_and_connect():
-    """멘토 검색 및 연결 기능을 표시합니다."""
-    st.header("🔍 멘토 찾기 및 연결")
-    
-    mentors = st.session_state.mentors_df
-    
-    # --- 검색 조건 입력 ---
-    st.subheader("나에게 맞는 멘토 검색하기")
-    
-    with st.form("mentor_search_form"):
-        col_f, col_t, col_s = st.columns(3)
-        
-        # 멘토 데이터에서 사용 가능한 옵션 추출
-        available_fields = sorted(mentors['occupation_major'].unique().tolist())
-        all_topics = set()
-        # topic_prefs 컬럼의 모든 고유한 주제 추출
-        mentors['topic_prefs'].astype(str).str.split('[,;]').apply(lambda x: all_topics.update([t.strip() for t in x if t.strip()]))
-        available_topics = sorted([t for t in all_topics if t])
-        available_styles = sorted(mentors['communication_style'].unique().tolist())
-        
-        with col_f:
-            search_field = st.selectbox("💼 전문 분야", options=['(전체)'] + available_fields)
-        
-        with col_t:
-            search_topic = st.selectbox("💬 주요 대화 주제", options=['(전체)'] + available_topics)
-            
-        with col_s:
-            search_style = st.selectbox("🗣️ 선호 대화 스타일", options=['(전체)'] + available_styles)
-
-        submitted = st.form_submit_button("🔎 검색 시작")
-        
-    if submitted:
-        # '전체'가 아닌 검색 조건을 추출
-        field = search_field if search_field != '(전체)' else ''
-        topic = search_topic if search_topic != '(전체)' else ''
-        style = search_style if search_style != '(전체)' else ''
-        
-        with st.spinner("최적의 멘토를 찾는 중..."):
-            recommendation_results = recommend_mentors(field, topic, style)
-            st.session_state.recommendations = recommendation_results
-        
-        if recommendation_results.empty and (field or topic or style):
-             st.info("⚠️ 선택하신 조건에 맞는 멘토를 찾지 못했습니다. 조건을 변경해 보세요.")
-        elif recommendation_results.empty:
-            st.info("멘토 데이터가 비어있습니다. 데이터를 확인해 주세요.")
-
-    # --- 검색 결과 표시 ---
-    if not st.session_state.recommendations.empty:
-        
-        # 검색 결과 상단에 요약 정보 표시
-        st.subheader(f"총 {len(st.session_state.recommendations)}명의 멘토가 검색되었습니다.")
-        if 'score' in st.session_state.recommendations.columns:
-             st.caption("(추천 점수 또는 이름순)")
-        
-        # 멘토 카드 형식으로 표시
-        for index, row in st.session_state.recommendations.iterrows():
-            with st.container(border=True):
-                col_name, col_score = st.columns([3, 1])
-                with col_name:
-                    st.markdown(f"#### 👤 {row['name']} ({row['age_band']})")
-                with col_score:
-                    if 'score' in row and row['score'] > 0:
-                        st.markdown(f"**🌟 추천 점수: {int(row['score'])}점**")
-                
-                col_m1, col_m2, col_m3 = st.columns(3)
-                with col_m1:
-                    st.markdown(f"**전문 분야:** {row['occupation_major']}")
-                with col_m2:
-                    st.markdown(f"**주요 주제:** {row['topic_prefs']}")
-                with col_m3:
-                    st.markdown(f"**소통 스타일:** {row['communication_style']}")
-                    
-                st.markdown(f"**멘토 한마디:** _{row['intro']}_")
-                
-                # <연결> 버튼 로직
-                connect_button_key = f"connect_btn_{row['name']}_{index}"
-                if st.button("🔗 연결", key=connect_button_key):
-                    # 연결 상태를 세션에 저장하고 리런하여 연결 프로세스 시작
-                    st.session_state.connecting = True
-                    st.session_state.connect_mentor_name = row['name']
-                    st.rerun() 
-    
-    elif not submitted:
-        st.info("검색 조건을 입력하고 '🔎 검색 시작' 버튼을 눌러 멘토를 찾아보세요.")
+                with get_conn() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO users (
+                            name, gender, age_band, preferred_channels, available_days, available_times,
+                            occupations_main, occupations_detail, occupation_other, interests, topics,
+                            style_primary, help_text, created_at, status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            name, gender, age, to_json(ch), to_json(days), to_json(times),
+                            to_json(occ_main), occ_detail, occ_other, to_json(selected_tags), to_json(topics),
+                            style, help_text, datetime.now(KST).isoformat(), "active",
+                        ),
+                    )
+                    conn.commit()
+                st.success("저장되었습니다. 환영해요! ✨")
 
 
-def show_daily_question():
-    """오늘의 질문 게시판을 표시합니다."""
-    st.header("💬 오늘의 질문: 세대 공감 창구")
-    st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
-    
-    # 예시 질문 (매일 바뀐다고 가정)
-    daily_q = "🤔 **'내가 만약 20대로 돌아간다면, 지금의 나에게 가장 해주고 싶은 조언은 무엇인가요?'**"
-    st.subheader(daily_q)
-    
-    # --- 답변 리스트 (더미 데이터) ---
-    sample_answers = [
-        {"나이대": "만 90세 이상", "이름": "진오", "답변": "너무 서두르지 말고, 꾸준함이 기적을 만든다는 것을 기억해라. 건강이 최고다."},
-        {"나이대": "만 20세~29세", "이름": st.session_state.user_profile.get('name', '청년 멘티'), "답변": "남들이 간다고 무조건 따라가지 말고, 나만의 속도를 찾는 용기가 필요하다고 말해주고 싶어요."},
-        {"나이대": "만 70세~79세", "이름": "다온", "답변": "돈보다 경험에 투자하고, 사랑하는 사람들에게 지금 당장 마음을 표현하렴. 후회는 순간이 아닌 나중에 온단다."},
-    ]
-    
-    # 답변 표시
-    for ans in sample_answers:
-        with st.expander(f"[{ans['나이대']}] {ans['이름']}님의 답변"):
-            st.write(ans['답변'])
-            
-    st.divider()
-    
-    # --- 답변 작성 폼 ---
-    st.subheader("나의 답변 작성하기")
-    with st.form("answer_form"):
-        answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
-        submitted = st.form_submit_button("답변 제출")
-        
-        if submitted:
-            if answer_text:
-                st.success("답변이 제출되었습니다. 다른 분들의 답변도 확인해 보세요!")
-            else:
-                st.warning("답변 내용을 입력해 주세요.")
-            
+# ---------- 멘토 검색 ----------
 
-# --- 5. 메인 앱 실행 함수 ---
+def parse_filter_list(s: str) -> List[str]:
+    if not s:
+        return []
+    # CSV에서 세퍼레이터가 섞일 수 있어 유연 파싱
+    parts = []
+    for sep in ["|", ",", "/", ";", " "]:
+        if sep in s:
+            parts = [p.strip() for p in s.split(sep) if str(p).strip()]
+            break
+    return parts or [s]
+
+
+def search_mentors(keyword: str, filters: Dict[str, List[str]]) -> List[sqlite3.Row]:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM mentors WHERE is_published = 1")
+        rows = [dict(r) for r in cur.fetchall()]
+
+    def match(row: Dict[str, Any]) -> bool:
+        text_blob = " ".join([
+            str(row.get("name", "")),
+            str(row.get("headline", "")),
+            str(row.get("bio", "")),
+            str(row.get("occupations_detail", "")),
+            str(row.get("interests", "")),
+        ])
+        if keyword and (keyword.lower() not in text_blob.lower()):
+            return False
+
+        # 채널/요일/시간/직업/관심사 필터
+        def includes_any(field: str, wanted: List[str]) -> bool:
+            if not wanted:
+                return True
+            vals = parse_filter_list(str(row.get(field, "")))
+            return any(w in vals for w in wanted)
+
+        if not includes_any("channels", filters.get("channels", [])):
+            return False
+        if not includes_any("available_days", filters.get("days", [])):
+            return False
+        if not includes_any("available_times", filters.get("times", [])):
+            return False
+        if not includes_any("occupations_main", filters.get("occ_main", [])):
+            return False
+        if not includes_any("interests", filters.get("interests", [])):
+            return False
+        return True
+
+    return [sqlite3.Row(dict(zip(rows[0].keys(), r.values()))) if rows else r for r in filter(match, rows)]
+
+
+def log_connect(user_id: Optional[int], mentor_id: int, search_ctx: Dict[str, Any], status: str):
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO connect_logs (user_id, mentor_id, created_at, search_context, redirect_link, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id, mentor_id, datetime.now(KST).isoformat(), to_json(search_ctx), MEET_LINK, status,
+            ),
+        )
+        conn.commit()
+
+
+def connect_and_redirect(mentor_id: int, user_id: Optional[int], search_ctx: Dict[str, Any]):
+    log_connect(user_id, mentor_id, search_ctx, status="redirected")
+    with st.spinner("잠시만 기다려주세요… 따뜻한 만남을 준비하고 있어요."):
+        # 1~2초 대기 후 리다이렉트 (JS)
+        st.session_state["_ready_to_redirect"] = True
+        st.session_state["_redirect_url"] = MEET_LINK
+    st.experimental_rerun()
+
+
+def page_search():
+    st.markdown("<h2 class='warm-title'>딱 맞는 인연, 지금 찾아볼까요?</h2>", unsafe_allow_html=True)
+    keyword = st.text_input("검색(이름/직무/소개 키워드)")
+
+    with st.expander("필터"):
+        f_channels = st.multiselect("소통 채널", CHANNELS)
+        f_days = st.multiselect("가능 요일", DAYS)
+        f_times = st.multiselect("가능 시간대", TIMES)
+        f_occ = st.multiselect("직업 대분류", OCCUP_MAIN)
+
+        # 관심사 태그 묶어서 다중 선택
+        all_tags = sum(INTEREST_TAGS.values(), [])
+        f_interests = st.multiselect("관심사 태그", all_tags)
+
+    if st.button("검색"):
+        st.session_state["_search_filters"] = {
+            "channels": f_channels,
+            "days": f_days,
+            "times": f_times,
+            "occ_main": f_occ,
+            "interests": f_interests,
+        }
+        st.session_state["_search_keyword"] = keyword
+
+    kw = st.session_state.get("_search_keyword", "")
+    flt = st.session_state.get("_search_filters", {
+        "channels": [], "days": [], "times": [], "occ_main": [], "interests": []
+    })
+
+    results = search_mentors(kw, flt)
+
+    st.caption(f"검색 결과: {len(results)}명")
+
+    for r in results:
+        with st.container():
+            st.markdown("<div class='warm-card'>", unsafe_allow_html=True)
+            cols = st.columns([1, 3, 1])
+            with cols[0]:
+                if r["photo_url"]:
+                    st.image(r["photo_url"], use_container_width=True)
+                else:
+                    st.image("https://picsum.photos/200/200?blur=2", use_container_width=True)
+            with cols[1]:
+                st.markdown(f"**{r['name']}**")
+                if r["headline"]:
+                    st.write(r["headline"])
+                # 키태그 3개 노출
+                tags = []
+                for fld in ["occupations_detail", "interests", "style_tags"]:
+                    vals = parse_filter_list(str(r.get(fld, "")))
+                    for v in vals:
+                        if v and len(tags) < 6:
+                            tags.append(v)
+                if tags:
+                    st.markdown(" ".join([f"<span class='tag'>{t}</span>" for t in tags]), unsafe_allow_html=True)
+
+                # 신고 버튼(멘토)
+                with st.popover("신고"):
+                    reason = st.text_area("신고 사유")
+                    if st.button("제출", key=f"rep_mentor_{r['mentor_id']}"):
+                        with get_conn() as conn:
+                            conn.execute(
+                                "INSERT INTO reports (target_type, target_id, user_id, reason, created_at) VALUES (?, ?, ?, ?, ?)",
+                                ("mentor", r["mentor_id"], None, reason, datetime.now(KST).isoformat())
+                            )
+                            conn.commit()
+                        st.success("접수되었습니다. 검토 후 조치하겠습니다.")
+
+            with cols[2]:
+                if st.button("🔗 연결", key=f"conn_{r['mentor_id']}"):
+                    search_ctx = {"keyword": kw, **flt}
+                    connect_and_redirect(r["mentor_id"], None, search_ctx)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ---------- 오늘의 질문 ----------
+
+def ensure_today_question() -> Tuple[int, str]:
+    today = datetime.now(KST).date()
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT id, text FROM daily_questions WHERE qdate = ?", (today.isoformat(),))
+        row = cur.fetchone()
+        if row:
+            return row[0], row[1]
+
+    # 오전 9시 이후에만 자동 생성
+    now = datetime.now(KST)
+    if now.time() >= time(9, 0):
+        qtext = DAILY_QUESTION_SEED[now.toordinal() % len(DAILY_QUESTION_SEED)]
+        with get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO daily_questions (qdate, text, author, status) VALUES (?, ?, ?, ?)",
+                (today.isoformat(), qtext, "system", "open")
+            )
+            conn.commit()
+            return cur.lastrowid, qtext
+    else:
+        # 9시 전이면 플레이스홀더 반환
+        return -1, "오늘의 질문은 오전 9시에 공개됩니다. 잠시만 기다려주세요."
+
+
+def page_daily():
+    st.markdown("<h2 class='warm-title'>오늘의 질문</h2>", unsafe_allow_html=True)
+    qid, qtext = ensure_today_question()
+    st.info(qtext)
+
+    if qid > 0:
+        with st.form("ans_form", clear_on_submit=True):
+            st.write("당신의 한 문장을 남겨주세요.")
+            age = st.selectbox("나이대", AGE_BANDS, index=0)
+            text = st.text_area("답변(글자 수 제한 없음)")
+            submitted = st.form_submit_button("등록")
+            if submitted:
+                if not text.strip():
+                    st.error("내용을 입력해주세요.")
+                else:
+                    with get_conn() as conn:
+                        conn.execute(
+                            """
+                            INSERT INTO daily_answers (question_id, user_id, age_band, text, created_at)
+                            VALUES (?, ?, ?, ?, ?)
+                            """,
+                            (qid, None, age, text.strip(), datetime.now(KST).isoformat())
+                        )
+                        conn.commit()
+                    st.success("감사합니다. 세대를 잇는 한 문장이 모이고 있어요.")
+
+        # 리스트
+        st.subheader("답변 모아보기")
+        sel_age = st.multiselect("나이대 필터", AGE_BANDS)
+        order = st.selectbox("정렬", ["최신순", "공감순", "무작위"], index=0)
+        with get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM daily_answers WHERE question_id = ? AND visibility = 'ok'", (qid,))
+            rows = [dict(r) for r in cur.fetchall()]
+
+        # 필터/정렬
+        if sel_age:
+            rows = [r for r in rows if r["age_band"] in sel_age]
+        if order == "최신순":
+            rows.sort(key=lambda r: r["created_at"], reverse=True)
+        elif order == "공감순":
+            rows.sort(key=lambda r: r["likes"], reverse=True)
+        else:
+            rows = sorted(rows, key=lambda r: (hash(r["id"]) % 1000))
+
+        for r in rows:
+            with st.container():
+                st.markdown("<div class='warm-card'>", unsafe_allow_html=True)
+                st.markdown(f"**{r['age_band']}** · {r['created_at']}")
+                st.write(r["text"])
+                cols = st.columns([1,1,4])
+                with cols[0]:
+                    if st.button(f"공감 {r['likes']}", key=f"like_{r['id']}"):
+                        with get_conn() as conn:
+                            conn.execute("UPDATE daily_answers SET likes = likes + 1 WHERE id = ?", (r["id"],))
+                            conn.commit()
+                        st.experimental_rerun()
+                with cols[1]:
+                    with st.popover("신고"):
+                        reason = st.text_input("신고 사유", key=f"rep_reason_{r['id']}")
+                        if st.button("제출", key=f"rep_ans_{r['id']}"):
+                            with get_conn() as conn:
+                                conn.execute(
+                                    "INSERT INTO reports (target_type, target_id, user_id, reason, created_at) VALUES (?, ?, ?, ?, ?)",
+                                    ("answer", r["id"], None, reason, datetime.now(KST).isoformat())
+                                )
+                                conn.commit()
+                            st.success("접수되었습니다. 검토 후 조치하겠습니다.")
+                st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ---------- 신고 ----------
+
+def page_reports():
+    st.markdown("<h2 class='warm-title'>신고 현황(요약)</h2>", unsafe_allow_html=True)
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM reports ORDER BY created_at DESC LIMIT 200")
+        rows = cur.fetchall()
+    if not rows:
+        st.info("아직 접수된 신고가 없습니다.")
+        return
+    for r in rows:
+        r = dict(r)
+        st.markdown("<div class='warm-card'>", unsafe_allow_html=True)
+        st.write(f"대상: **{r['target_type']}** #{r['target_id']} · 접수시각: {r['created_at']}")
+        st.write(f"사유: {r['reason'] or '(미기재)'}")
+        st.caption(f"상태: {r['status']}")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ---------- 홈 ----------
+
+def page_home():
+    st.markdown("<h1 class='warm-title'>결 · 멘티</h1>", unsafe_allow_html=True)
+    st.caption("따뜻한 연결이 길이 됩니다.")
+
+    # 오늘의 질문 요약 카드
+    qid, qtext = ensure_today_question()
+    st.markdown("<div class='warm-card'>", unsafe_allow_html=True)
+    st.subheader("오늘의 질문")
+    st.write(qtext)
+    if st.button("바로 참여하기") and qid != -1:
+        st.session_state["_nav"] = "오늘의 질문"
+        st.experimental_rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # 바로가기
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.link_button("회원가입", "#회원가입")
+    with c2:
+        st.link_button("멘토 검색", "#멘토-검색")
+    with c3:
+        st.link_button("신고하기", "#신고")
+
+
+# =========================
+# 6) 앱 실행
+# =========================
 
 def main():
-    st.set_page_config(
-        page_title="세대 간 멘토링 플랫폼",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+    st.set_page_config(page_title="결 · 멘티", page_icon="💠", layout="wide")
+    st.markdown(WARM_CSS, unsafe_allow_html=True)
 
-    # 멘토 데이터 로드 실패 시 앱 종료
-    if st.session_state.mentors_df.empty and not st.session_state.is_registered:
-        st.stop()
+    init_db()
+    seed_mentors_if_empty()
 
-    # --- 연결 프로세스 처리 (연결 버튼 클릭 시) ---
-    if st.session_state.get('connecting'):
-        mentor_name = st.session_state.connect_mentor_name
-        
-        st.info(f"🔗 {mentor_name} 멘토와 연결을 시도합니다. 잠시만 기다려주세요...")
-        time.sleep(2) 
-        
-        st.balloons()
-        
-        # 새 탭으로 Google Meet URL을 엽니다.
-        st.markdown(
+    # JS 리다이렉트 처리 (상단 전역 처리)
+    if st.session_state.get("_ready_to_redirect"):
+        url = st.session_state.get("_redirect_url", MEET_LINK)
+        st.components.v1.html(
             f"""
-            <script>
-                window.open('{GOOGLE_MEET_URL}', '_blank');
-            </script>
-            """, 
-            unsafe_allow_html=True
+            <html><head><meta http-equiv='refresh' content='1; URL={url}' /></head>
+            <body>
+                <p>잠시 후 이동합니다. 이동하지 않으면 <a href='{url}' target='_self'>여기를 클릭</a>하세요.</p>
+                <script>setTimeout(function(){{ window.location.href = '{url}'; }}, 1200);</script>
+            </body></html>
+            """,
+            height=80,
         )
-        
-        st.success(f"✅ {mentor_name} 멘토와의 화상 채팅이 새로운 탭으로 시작되었습니다. (가상 연결)")
-        
-        # 상태 초기화
-        st.session_state.connecting = False
-        del st.session_state.connect_mentor_name
-        st.stop() # 페이지 갱신 중단 (Streamlit 버그 방지)
+        # 한 번만 실행
+        st.session_state["_ready_to_redirect"] = False
 
+    # 사이드 내비
+    page = nav()
+    st.markdown("<div id='홈'></div>", unsafe_allow_html=True)
 
-    # --- 메인 페이지 흐름 제어 ---
-    
-    st.sidebar.title("메뉴")
-    
-    # 1. 미가입 상태: 회원 가입 페이지로 강제 이동
-    if not st.session_state.is_registered:
-        show_registration_form()
-    # 2. 가입 상태: 메뉴 표시 및 페이지 이동
-    else:
-        page = st.sidebar.radio(
-            "페이지 이동",
-            ["멘토 찾기", "오늘의 질문"],
-            index=0
-        )
-        
-        # 사이드바에 사용자 정보 요약
-        st.sidebar.divider()
-        st.sidebar.markdown(f"**환영합니다, {st.session_state.user_profile.get('name')}님!**")
-        st.sidebar.caption(f"나이대: {st.session_state.user_profile.get('age_band')}")
-        
-        st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻")
+    if page == "홈":
+        page_home()
+    elif page == "회원가입":
+        st.markdown("<div id='회원가입'></div>", unsafe_allow_html=True)
+        page_signup()
+    elif page == "멘토 검색":
+        st.markdown("<div id='멘토-검색'></div>", unsafe_allow_html=True)
+        page_search()
+    elif page == "오늘의 질문":
+        page_daily()
+    elif page == "신고":
+        st.markdown("<div id='신고'></div>", unsafe_allow_html=True)
+        page_reports()
 
-        # 페이지 렌더링
-        if page == "멘토 찾기":
-            show_mentor_search_and_connect()
-        elif page == "오늘의 질문":
-            show_daily_question()
 
 if __name__ == "__main__":
     main()
