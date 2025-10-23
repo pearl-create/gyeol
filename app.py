@@ -5,6 +5,125 @@ import time
 import os
 
 # --- 1. 데이터 로드 및 상수 정의 ---
+# --- 디자인 강화 CSS (따뜻한 연결 스타일) ---
+CUSTOM_CSS = """
+<style>
+    /* 전체 배경과 폰트 */
+    .stApp {
+        background: linear-gradient(180deg, #fff9f5 0%, #fff 100%);
+        font-family: 'Pretendard', 'Noto Sans KR', sans-serif;
+        color: #4e342e;
+    }
+
+    /* 제목 / 헤더 */
+    h1, h2, h3, h4, h5 {
+        color: #6d4c41;
+        font-weight: 700;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    /* 카드 느낌 컨테이너 */
+    .stContainer {
+        background: rgba(255, 255, 255, 0.7);
+        border-radius: 18px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.05);
+        padding: 20px 25px;
+        margin-bottom: 18px;
+        border: 1px solid #f5e6dc;
+    }
+
+    /* 버튼 */
+    div.stButton > button:first-child {
+        background: linear-gradient(90deg, #ffe0b2, #ffccbc);
+        color: #4e342e;
+        font-weight: 600;
+        border: none;
+        border-radius: 12px;
+        padding: 10px 20px;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+        transition: 0.3s ease;
+    }
+    div.stButton > button:first-child:hover {
+        background: linear-gradient(90deg, #ffd180, #ffab91);
+        color: #3e2723;
+        transform: scale(1.03);
+    }
+
+    /* 사이드바 */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #fbe9e7 0%, #fff3e0 100%);
+        border-right: 1px solid #f5e6dc;
+    }
+    .css-1d391kg, .css-1v3fvcr {
+        color: #4e342e !important;
+    }
+
+    /* 입력 필드 */
+    .stTextInput > div > div > input,
+    .stTextArea > div > textarea,
+    .stSelectbox > div > div > div,
+    .stMultiSelect > div > div > div {
+        background: #fffdfa;
+        border: 1px solid #f0d9c9;
+        border-radius: 10px;
+        color: #4e342e;
+    }
+    .stTextInput > div > div > input:focus,
+    .stTextArea > div > textarea:focus {
+        border-color: #ffab91;
+        box-shadow: 0 0 0 1px #ffab91;
+    }
+
+    /* 체크박스 / 라디오 */
+    div[data-baseweb="checkbox"] > label,
+    div[data-baseweb="radio"] > label {
+        color: #5d4037;
+    }
+
+    /* 구분선 */
+    hr {
+        border: none;
+        height: 1px;
+        background: linear-gradient(to right, transparent, #ffccbc, transparent);
+        margin: 1.5rem 0;
+    }
+
+    /* 강조 텍스트 */
+    .highlight {
+        background: linear-gradient(90deg, #ffe0b2 0%, #fff3e0 100%);
+        padding: 4px 8px;
+        border-radius: 6px;
+        color: #4e342e;
+        font-weight: 600;
+    }
+
+    /* 풍선 효과 메시지 */
+    .stSuccess {
+        background: rgba(255, 243, 224, 0.8);
+        border-left: 5px solid #ffab91;
+        color: #4e342e;
+    }
+
+    /* 링크 버튼 */
+    a {
+        color: #ff7043;
+        font-weight: 600;
+        text-decoration: none;
+    }
+    a:hover {
+        text-decoration: underline;
+    }
+</style>
+"""
+
+# main() 함수 시작 부분에 추가
+def main():
+    st.set_page_config(
+        page_title="세대 간 멘토링 플랫폼",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 # 멘토 데이터 파일 경로 (사용자 업로드 파일)
 MENTOR_CSV_PATH = "멘토더미.csv"
