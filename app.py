@@ -1,357 +1,178 @@
-# app.py
-# -*- coding: utf-8 -*-
-"""
-결(結) — 멘티 전용 매칭 데모 (대화 주제 제거 버전 + 신청 즉시 채팅 이동)
-- CSV: 멘토더미.csv (인코딩/구분자 자동 감지, /mnt/data 우선)
-- 디자인: 로컬 logo_gyeol.png가 있으면 배경으로, 없으면 그라디언트
-- 입력: PURPOSES / CURRENT_OCCUPATIONS / HOBBIES / OCCUPATION_MAJORS / note
-- 매칭: 목적, 관심사(취미), 선호 전공계열, 현재 직종→전공계열 매핑, note-소개 TF-IDF
-- 출력: 상위 5명 카드 + "💬 대화 신청하기"(→ 채팅창으로 바로 이동) + 신청 내역
-"""
-
-from pathlib import Path
-from typing import Dict, Set
-
-import pandas as pd
 import streamlit as st
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+import pandas as pd
+import random
 
-# ==============================
-# 0) 라우팅/채팅 상태 + 간단 채팅 뷰 (★ 최소 추가)
-# ==============================
-if "view" not in st.session_state:
-    st.session_state["view"] = "match"   # "match" | "chat"
-if "chat_log" not in st.session_state:
-    st.session_state["chat_log"] = {}    # {mentor_name: [(role, text, ts), ...]}
+# --- 1. 데이터 로드 및 정의 ---
 
-def goto(view: str):
-    st.session_state["view"] = view
-    st.rerun()
+# 멘토 데이터 로드 (사용자가 제공한 CSV 파일 활용)
+# 파일 이름을 직접 사용합니다. Streamlit Cloud나 Jupyter 환경이 아닌 경우,
+# 해당 파일이 app.py와 같은 폴더에 있어야 합니다.
+try:
+    mentor_csv_path = "멘토더미.csv"
+    mentors_df = pd.read_csv(mentor_csv_path)
+    
+    # 추천 로직에 사용할 주요 컬럼 이름을 명확히 합니다.
+    # mentor_df의 컬럼: name, gender, age_band, current_occupation, occupation_major, interests, purpose, topic_prefs, communication_style, intro
+    
+    # 예시로 사용할 멘티 데이터
+    mentees_data = {
+        'ID': [201, 202, 203],
+        '이름': ['청년 멘티 A', '청년 멘티 B', '청년 멘티 C'],
+        '희망 분야': ['연구개발/ IT', '예술/디자인', '일반 사무'], # occupation_major와 매칭
+        '희망 주제': ['IT·테크', '예술·문화', '진로·직업'], # topic_prefs와 매칭
+        '희망 대화 스타일': ['효율추구형', '댕댕이형', '연두부형'] # communication_style와 매칭
+    }
+    mentees_df = pd.DataFrame(mentees_data)
 
-from datetime import datetime
-def mentor_autoreply(row: pd.Series, mentee_note: str = "") -> str:
-    name = (row.get("name","") or "").strip() or "멘토"
-    intro = (row.get("intro","") or "반가워요. 편하게 이야기 나눠요.")
-    purp  = (row.get("purpose","") or "")
-    msg = f"안녕하세요, {name}입니다 😊\n\n{intro}"
-    if purp:
-        msg += f"\n\n제가 주로 도와드릴 수 있는 분야는 '{purp}'예요."
-    if mentee_note.strip():
-        msg += f"\n\n신청 메모 잘 읽었습니다: “{mentee_note.strip()}”"
-    return msg
+except FileNotFoundError:
+    st.error(f"Error: 멘토 데이터 파일 '{mentor_csv_path}'을(를) 찾을 수 없습니다. 파일 경로를 확인해 주세요.")
+    st.stop()
+except Exception as e:
+    st.error(f"멘토 데이터 로드 중 오류 발생: {e}")
+    st.stop()
 
-def view_chat():
-    partner = st.session_state.get("chat_partner")
-    if not partner:
-        st.warning("대화 상대가 없습니다. 추천 화면에서 '대화 신청하기'를 눌러주세요.")
-        if st.button("← 추천으로 돌아가기"): goto("match")
-        return
 
-    st.title(f"💬 {partner} 님과의 대화")
-    log = st.session_state["chat_log"].setdefault(partner, [])
+# 세션 상태에 데이터 초기화
+if 'mentors_df' not in st.session_state:
+    # 추천 로직을 위한 전처리: topic_prefs와 communication_style은 여러 값이 있을 수 있으므로
+    # 이후 매칭 로직에서 이를 고려해야 합니다.
+    st.session_state.mentors_df = mentors_df.copy()
+if 'mentees_df' not in st.session_state:
+    st.session_state.mentees_df = mentees_df.copy()
+if 'recommendations' not in st.session_state:
+    st.session_state.recommendations = [] # 추천 결과 저장
 
-    # 기존 대화 렌더
-    for role, text, ts in log:
-        with st.chat_message("assistant" if role == "assistant" else "user"):
-            st.markdown(text)
+# --- 2. 멘토 추천 로직 함수 ---
 
-    # 입력
-    user_msg = st.chat_input("메시지를 입력하세요")
-    if user_msg:
-        log.append(("user", user_msg, datetime.now().isoformat()))
-        # 아주 간단한 에코 응답
-        bot = f"{partner}: 흥미로운 이야기예요! 조금만 더 자세히 알려주실래요?"
-        log.append(("assistant", bot, datetime.now().isoformat()))
-        st.session_state["chat_log"][partner] = log
-        st.rerun()
-
-    if st.button("← 추천으로 돌아가기", use_container_width=True):
-        goto("match")
-
-# ==============================
-# 1) 리스트(변수) — (변수명 변경 없음)
-# ==============================
-GENDERS = ["남", "여", "기타"]
-AGE_BANDS = [
-    "만 13세~19세", "만 20세~29세", "만 30세~39세", "만 40세~49세",
-    "만 50세~59세", "만 60세~69세", "만 70세~79세", "만 80세~89세", "만 90세 이상"
-]
-
-PURPOSES = ["진로 / 커리어 조언", "학업 / 전문지식 조언", "사회, 인생 경험 공유", "정서적 지지와 대화"]
-
-CURRENT_OCCUPATIONS = [
-    "경영자(CEO / 사업주 / 임원 / 부서장)",
-    "행정관리(공공기관 관리자 / 기업 행정팀장 / 프로젝트 매니저)",
-    "보건(의사 / 치과의사 / 약사 / 간호사 / 한의사 / 물리치료사 / 간호조무사 / 재활치료사 / 요양보호사)",
-    "법률/행정(변호사 / 판사 / 검사 / 세무사 / 행정사)",
-    "교육(교수 / 교사 / 학원강사 / 연구원)",
-    "연구개발/ IT(엔지니어 / 연구원 / 소프트웨어 개발자 / 데이터 분석가)",
-    "예술/디자인(디자이너 / 예술가 / 작가 / 사진작가)",
-    "기술(기술자 / 공학 기술자 / 실험실 기술자 / 회계사 / 건축기사)",
-    "서비스 전문(상담사 / 심리치료사 / 사회복지사 / 코디네이터)",
-    "일반 사무 (사무직원 / 경리 / 비서 / 고객 상담 / 문서 관리)",
-    "영업(영업사원 / 마케팅 지원 / 고객 관리)",
-    "판매(점원 / 슈퍼 / 편의점 직원 / 백화점 직원)",
-    "생산/제조(공장 생산직 / 조립공 / 기계조작원 / 용접공)",
-    "시설(배관공 / 전기공 / 건설노무자 / 목수)",
-    "농림수산업(농부 / 축산업 / 어부 / 임업 종사자)",
-    "운송/기계(트럭기사 / 버스기사 / 지게차 운전 / 기계조작원)",
-    "청소 / 경비(경비원 / 환경미화원)",
-    "학생 (초·중·고·대학생 / 대학원생)",
-    "전업주부",
-    "구직자 / 최근 퇴사자 / 프리랜서",
-    "기타",
-]
-
-HOBBIES = ["독서", "음악 감상", "영화/드라마 감상", "게임 (PC/콘솔/모바일)", "운동/스포츠 관람",
-           "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래"]
-
-OCCUPATION_MAJORS = ["교육", "법률/행정", "연구개발/ IT", "예술/디자인", "의학/보건", "기타"]
-
-# 현재 직종 → 전공계열 매핑 (CSV의 occupation_major와 비교용)
-OCC_TO_MAJOR = {
-    "경영자(CEO / 사업주 / 임원 / 부서장)": "기타",
-    "행정관리(공공기관 관리자 / 기업 행정팀장 / 프로젝트 매니저)": "법률/행정",
-    "보건(의사 / 치과의사 / 약사 / 간호사 / 한의사 / 물리치료사 / 간호조무사 / 재활치료사 / 요양보호사)": "의학/보건",
-    "법률/행정(변호사 / 판사 / 검사 / 세무사 / 행정사)": "법률/행정",
-    "교육(교수 / 교사 / 학원강사 / 연구원)": "교육",
-    "연구개발/ IT(엔지니어 / 연구원 / 소프트웨어 개발자 / 데이터 분석가)": "연구개발/ IT",
-    "예술/디자인(디자이너 / 예술가 / 작가 / 사진작가)": "예술/디자인",
-}
-
-# ==============================
-# 2) 배경 (로컬 파일 있으면 사용)
-# ==============================
-from base64 import b64encode
-import mimetypes
-
-BACKGROUND_FILE = "logo_gyeol.png"
-
-@st.cache_data(show_spinner=False)
-def get_background_data_url() -> str | None:
-    p = Path(__file__).resolve().parent / BACKGROUND_FILE
-    if not p.is_file():
-        return None
-    mime, _ = mimetypes.guess_type(p.name)
-    mime = mime or "image/png"
-    data = p.read_bytes()
-    b64 = b64encode(data).decode("ascii")
-    return f"data:{mime};base64,{b64}"
-
-def inject_style():
-    data_url = get_background_data_url()
-    if data_url:
-        bg_style = f"background-image: url('{data_url}'); background-size: cover; background-position: center; background-attachment: fixed;"
-    else:
-        bg_style = "background: radial-gradient(circle at 30% 30%, #14193F, #1B1F4B 25%, #10142C 60%, #080A1A 100%);"
-
-    st.markdown(f"""
-    <style>
-      [data-testid="stAppViewContainer"] {{
-        {bg_style}
-      }}
-      [data-testid="stHeader"] {{ background: transparent; }}
-      .block-container {{
-        max-width: 900px;
-        padding: 2.25rem 2rem 3rem;
-        background: rgba(255,255,255,0.72);
-        border-radius: 20px;
-        backdrop-filter: blur(4px);
-        box-shadow: 0 6px 22px rgba(0,0,0,0.12);
-      }}
-      h1, h2, h3 {{ letter-spacing: .2px; }}
-      .stButton>button {{
-        background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-        color: #fff; border: none; border-radius: 12px; font-weight: 700;
-        box-shadow: 0 6px 12px rgba(37,99,235,0.28);
-      }}
-      .stButton>button:hover {{ filter: brightness(1.05); }}
-    </style>
-    """, unsafe_allow_html=True)
-
-    if not data_url:
-        st.caption("💡 'logo_gyeol.png' 파일을 찾지 못했습니다. 같은 폴더에 넣어주세요.")
-
-# ==============================
-# 3) CSV 로딩
-# ==============================
-@st.cache_data(show_spinner=False)
-def load_default_csv() -> pd.DataFrame:
-    cand_paths = ["/mnt/data/멘토더미.csv", "멘토더미.csv"]
-    encodings = ["utf-8-sig", "utf-8", "cp949"]
-    seps = [",", ";", "\t"]
-    for path in cand_paths:
-        f = Path(path)
-        if not f.exists():
-            continue
-        for enc in encodings:
-            for sep in seps:
-                try:
-                    df = pd.read_csv(f, encoding=enc, sep=sep)
-                    if not df.empty:
-                        bad = [c for c in df.columns if str(c).lower().startswith("unnamed")]
-                        if bad:
-                            df = df.drop(columns=bad)
-                        st.session_state["mentor_csv_path"] = str(f)
-                        return df
-                except Exception:
-                    continue
-    return pd.DataFrame([{
-        "name": "김샘", "gender": "남", "age_band": "만 60세~69세",
-        "current_occupation": "교육(교수 / 교사 / 학원강사 / 연구원)",
-        "occupation_major": "교육",
-        "interests": "독서, 인문학",
-        "purpose": "사회, 인생 경험 공유, 정서적 지지와 대화",
-        "intro": "경청 중심의 상담을 합니다."
-    }])
-
-# ==============================
-# 4) 매칭 유틸/스코어 (대화 주제 제거)
-# ==============================
-def list_to_set(s) -> Set[str]:
-    if pd.isna(s):
-        return set()
-    return {x.strip() for x in str(s).replace(";", ",").split(",") if x.strip()}
-
-def ratio_overlap(a: Set[str], b: Set[str]) -> float:
-    return len(a & b) / len(a | b) if a and b else 0.0
-
-def tfidf_similarity(a: str, b: str) -> float:
-    a, b = (a or "").strip(), (b or "").strip()
-    if not a or not b:
-        return 0.0
-    vec = TfidfVectorizer(max_features=400, ngram_range=(1, 2))
-    X = vec.fit_transform([a, b])
-    return float(cosine_similarity(X[0], X[1])[0, 0])
-
-def map_current_occ_to_majors(selected_occs: Set[str]) -> Set[str]:
-    majors = set()
-    for occ in selected_occs:
-        majors.add(OCC_TO_MAJOR.get(occ, "기타"))
-    return majors
-
-def compute_score(mentee: Dict, mentor_row: pd.Series) -> int:
+def recommend_mentors(field, topic, style):
     """
-    가중치(총 100):
-      - 목적 겹침 30
-      - 취미/관심사 겹침 25
-      - 선호 전공계열 포함 25
-      - '현재 직종'→전공계열 매핑 일치 10
-      - note vs intro TF-IDF 10
+    멘티의 희망 조건에 따라 멘토를 점수 기반으로 추천합니다.
+    - 점수 부여 기준: 분야(3점) > 주제(2점) > 대화 스타일(1점)
     """
-    s = lambda k: list_to_set(mentor_row.get(k, ""))
-    mentor_major = (mentor_row.get("occupation_major", "") or "").strip()
+    
+    mentors = st.session_state.mentors_df.copy()
+    mentors['score'] = 0
+    
+    # 1. 희망 분야 (occupation_major) 매칭: 3점
+    mentors['score'] += mentors['occupation_major'].apply(lambda x: 3 if x == field else 0)
+    
+    # 2. 희망 주제 (topic_prefs) 매칭: 2점
+    # topic_prefs는 콤마로 구분된 여러 값일 수 있습니다.
+    mentors['score'] += mentors['topic_prefs'].astype(str).apply(
+        lambda x: 2 if topic in x else 0
+    )
+    
+    # 3. 희망 대화 스타일 (communication_style) 매칭: 1점
+    mentors['score'] += mentors['communication_style'].apply(lambda x: 1 if x == style else 0)
+    
+    # 점수가 0점 이상인 멘토만 필터링하고 점수 순으로 정렬
+    recommended_mentors = mentors[mentors['score'] > 0].sort_values(by='score', ascending=False)
+    
+    # 상위 5명 (또는 그 이하) 추천
+    return recommended_mentors.head(5).reset_index(drop=True)
 
-    purpose_score = ratio_overlap(mentee["purpose"], s("purpose")) * 30
-    hobby_score   = ratio_overlap(mentee["interests"], s("interests")) * 25
-    major_pref_score = 25.0 if mentor_major and mentor_major in mentee["pref_majors"] else 0.0
-    mapped_occ_score = 10.0 if mentor_major and mentor_major in mentee["mapped_majors"] else 0.0
-    note_score = tfidf_similarity(mentee["note"], mentor_row.get("intro", "")) * 10
 
-    total = purpose_score + hobby_score + major_pref_score + mapped_occ_score + note_score
-    return int(round(total))
+# --- 3. Streamlit UI 구성 ---
 
-# ==============================
-# 5) 페이지 & 폼
-# ==============================
-st.set_page_config(page_title="결: 멘티 데모", page_icon="🤝", layout="centered", initial_sidebar_state="collapsed")
-inject_style()
+st.title("👵👴 세대 간 멘토 추천 플랫폼 🧑‍💻")
+st.caption("청년 멘티의 조건에 가장 적합한 노인 멘토를 추천합니다.")
 
-# (★) chat 라우팅이면 바로 채팅 화면으로 전환하고 종료 — 처음으로 되돌아가는 문제 방지
-if st.session_state["view"] == "chat":
-    view_chat()
-    st.stop()
+## 🛠️ 멘티 조건 검색 및 멘토 추천
 
-st.title("연결될 준비")
-mentors_df = load_default_csv()
-src = st.session_state.get("mentor_csv_path", "(기본 더미)")
-st.caption(f"멘토 데이터 세트 로드됨: {len(mentors_df)}명 · 경로: {src}")
+st.header("멘토 추천받기")
+st.write("청년 멘티가 희망하는 조건을 선택하여 적합한 멘토를 찾아보세요.")
 
-st.markdown("---")
-st.subheader("내가 원하는 멘토의 조건")
+# 멘토 데이터에서 사용 가능한 옵션 추출
+available_fields = sorted(mentors_df['occupation_major'].unique().tolist())
+# topic_prefs는 여러 값이 있으므로, 모든 유니크한 값을 추출
+all_topics = set()
+mentors_df['topic_prefs'].astype(str).str.split('[,;]').apply(lambda x: all_topics.update([t.strip() for t in x if t.strip()]))
+available_topics = sorted([t for t in all_topics if t])
+available_styles = sorted(mentors_df['communication_style'].unique().tolist())
 
-with st.form("mentee_form"):
-    # 프로필(선택)
-    name = st.text_input("이름(선택)", "")
-    gender = st.radio("성별(선택)", GENDERS, horizontal=True, index=0)
-    age_band = st.selectbox("나이대(선택)", AGE_BANDS, index=0)
 
-    # 핵심 입력 — (변수명 유지)
-    PURPOSES = PURPOSES  # (그대로 사용)
-    purpose = st.multiselect("멘토링 목적", PURPOSES, ["진로 / 커리어 조언"])
-    desired_current_occ = st.multiselect("관심 있는 현재 직종", CURRENT_OCCUPATIONS)
-    pref_majors = st.multiselect("선호 전공계열(멘토 전공)", OCCUPATION_MAJORS)
-    interests = st.multiselect("관심사/취미", HOBBIES)
+with st.form("mentor_recommendation_form"):
+    
+    col_f, col_t, col_s = st.columns(3)
+    
+    with col_f:
+        selected_field = st.selectbox(
+            "💼 1. 희망 멘토 분야 (가장 중요)",
+            options=['선택 안 함'] + available_fields
+        )
+    
+    with col_t:
+        selected_topic = st.selectbox(
+            "💬 2. 희망 대화 주제",
+            options=['선택 안 함'] + available_topics
+        )
+        
+    with col_s:
+        selected_style = st.selectbox(
+            "🗣️ 3. 희망 대화 스타일",
+            options=['선택 안 함'] + available_styles
+        )
 
-    # 메모
-    note = st.text_area("한 줄 요청사항", max_chars=120, placeholder="예) 간호사 퇴직하신 선배님을 찾습니다!")
+    submitted = st.form_submit_button("🌟 추천 멘토 찾기")
+    
+    if submitted:
+        # '선택 안 함'을 제외하고 실제 값만 전달
+        search_field = selected_field if selected_field != '선택 안 함' else ''
+        search_topic = selected_topic if selected_topic != '선택 안 함' else ''
+        search_style = selected_style if selected_style != '선택 안 함' else ''
+        
+        if not search_field and not search_topic and not search_style:
+            st.warning("⚠️ 멘토 추천을 위해 최소한 하나의 조건을 선택해 주세요.")
+        else:
+            with st.spinner("최적의 멘토를 찾는 중..."):
+                recommendation_results = recommend_mentors(search_field, search_topic, search_style)
+                st.session_state.recommendations = recommendation_results
+            
+            if not recommendation_results.empty:
+                st.success(f"✅ 조건에 가장 적합한 멘토 **{len(recommendation_results)}명**을 찾았습니다!")
+            else:
+                st.info("⚠️ 현재 선택하신 조건에 맞는 멘토가 없습니다. 조건을 바꿔서 다시 검색해 보세요.")
 
-    submitted = st.form_submit_button("추천 멘토 보기", use_container_width=True)
+st.divider()
 
-if not submitted:
-    st.info("설문을 입력하고 '추천 멘토 보기'를 눌러주세요.")
-    st.stop()
+## 📝 추천 결과 표시
 
-# 멘티 프로필 정리 (변수명 유지)
-mapped_majors = map_current_occ_to_majors(set(desired_current_occ))
-mentee = {
-    "purpose": set(purpose),
-    "interests": set(interests),
-    "note": note,
-    "pref_majors": set(pref_majors),
-    "mapped_majors": mapped_majors,
-}
+st.header("추천 멘토 리스트")
 
-# ==============================
-# 6) 매칭 & 결과
-# ==============================
-scores = [{"idx": i, "score": compute_score(mentee, row)} for i, row in mentors_df.iterrows()]
-ranked = sorted(scores, key=lambda x: x["score"], reverse=True)[:5]
-
-st.markdown("---")
-st.subheader("추천 결과 Top 5")
-
-if "chat_requests" not in st.session_state:
-    st.session_state["chat_requests"] = []
-
-if not ranked:
-    st.warning("추천 결과가 없습니다. 입력을 확인해 주세요.")
-    st.stop()
-
-for i, item in enumerate(ranked, start=1):
-    r = mentors_df.loc[item["idx"]]
-    with st.container(border=True):
-        st.markdown(f"### #{i}. {r.get('name','(이름없음)')} · {r.get('age_band','')}")
-        st.write(f"**현재 직종(전공계열):** {r.get('current_occupation','(미기재)')} / {r.get('occupation_major','(미기재)')}")
-        # communication_style 컬럼이 있으면 표시
-        if "communication_style" in mentors_df.columns:
-            st.write(f"**소통 스타일:** {r.get('communication_style','')}")
-        st.write(f"**소개:** {r.get('intro','')}")
-        st.write(f"**멘토 강점:** 목적({r.get('purpose','')}) · 관심사({r.get('interests','')})")
-        # 🔕 점수 표시 제거
-        # st.write(f"**매칭 점수:** {item['score']}")
-
-        # 멘티가 고른 의도도 표시
-        want = []
-        if mentee["pref_majors"]:
-            want.append("선호 전공계열: " + ", ".join(sorted(mentee["pref_majors"])))
-        if mentee["mapped_majors"]:
-            want.append("현재 직종(선택)→전공계열: " + ", ".join(sorted(mentee["mapped_majors"])))
-        if want:
-            st.caption(" · ".join(want))
-
-        # ✅ 여기만 변경: 신청 즉시 채팅 화면으로 이동 + 자동 첫응답
-        if st.button(f"💬 {r.get('name','')} 님에게 대화 신청하기", key=f"chat_{i}", use_container_width=True):
-            st.session_state["chat_partner"] = r.get("name","")
-            log = st.session_state["chat_log"].setdefault(st.session_state["chat_partner"], [])
-            auto = mentor_autoreply(r, mentee.get("note",""))
-            log.append(("assistant", auto, datetime.now().isoformat()))
-            st.session_state["chat_log"][st.session_state["chat_partner"]] = log
-            goto("chat")
-
-if st.session_state["chat_requests"]:
-    st.markdown("---")
-    st.subheader("📬 내 대화 신청 내역")
-    for req in st.session_state["chat_requests"]:
-        st.write(f"- {req['mentor']} 님 → {req['status']}")
+if st.session_state.recommendations is not None and not st.session_state.recommendations.empty:
+    
+    recommended_df = st.session_state.recommendations.rename(columns={
+        'name': '멘토 이름',
+        'age_band': '연령대',
+        'occupation_major': '전문 분야',
+        'topic_prefs': '주요 관심 주제',
+        'communication_style': '대화 스타일',
+        'intro': '멘토 소개글',
+        'score': '추천 점수'
+    })
+    
+    # 보여줄 컬럼 선택 및 순서 조정
+    display_cols = [
+        '멘토 이름', '추천 점수', '전문 분야', '주요 관심 주제', 
+        '대화 스타일', '연령대', '멘토 소개글'
+    ]
+    
+    # 멘토 카드 형식으로 표시
+    for index, row in recommended_df.iterrows():
+        st.subheader(f"{index + 1}. {row['멘토 이름']} (추천 점수: {int(row['추천 점수'])}점)")
+        
+        # 메트릭스 형태로 핵심 정보 요약
+        col_m1, col_m2, col_m3 = st.columns(3)
+        with col_m1:
+            st.metric("전문 분야", row['전문 분야'])
+        with col_m2:
+            st.metric("대화 스타일", row['대화 스타일'])
+        with col_m3:
+            st.metric("연령대", row['연령대'])
+            
+        st.markdown(f"**주요 관심 주제:** `{row['주요 관심 주제']}`")
+        st.markdown(f"**멘토 소개:** _{row['멘토 소개글']}_")
+        st.markdown("---")
+        
+else:
+    st.info("조건을 선택하고 '🌟 추천 멘토 찾기' 버튼을 눌러 추천을 시작해 주세요.")
