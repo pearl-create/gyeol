@@ -1,226 +1,161 @@
-# app.py
-# -*- coding: utf-8 -*-
-"""
-결(結) — 멘티 전용 매칭 데모 (대화 주제 제거 + 신청 시 채팅 바로 연결)
-"""
-
-from pathlib import Path
-from typing import Dict, Set
-import pandas as pd
 import streamlit as st
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from base64 import b64encode
-import mimetypes
-from datetime import datetime
+import pandas as pd
+import random
 
-# ==============================
-# 1) 기본 상수
-# ==============================
-GENDERS = ["남", "여", "기타"]
-AGE_BANDS = [
-    "만 13세~19세", "만 20세~29세", "만 30세~39세", "만 40세~49세",
-    "만 50세~59세", "만 60세~69세", "만 70세~79세", "만 80세~89세", "만 90세 이상"
-]
-
-PURPOSES = ["진로 / 커리어 조언", "학업 / 전문지식 조언", "사회, 인생 경험 공유", "정서적 지지와 대화"]
-CURRENT_OCCUPATIONS = [
-    "경영자(CEO / 사업주 / 임원 / 부서장)",
-    "행정관리(공공기관 관리자 / 기업 행정팀장 / 프로젝트 매니저)",
-    "보건(의사 / 치과의사 / 약사 / 간호사 / 한의사 / 물리치료사 / 간호조무사 / 재활치료사 / 요양보호사)",
-    "법률/행정(변호사 / 판사 / 검사 / 세무사 / 행정사)",
-    "교육(교수 / 교사 / 학원강사 / 연구원)",
-    "연구개발/ IT(엔지니어 / 연구원 / 소프트웨어 개발자 / 데이터 분석가)",
-    "예술/디자인(디자이너 / 예술가 / 작가 / 사진작가)",
-    "기술(기술자 / 공학 기술자 / 실험실 기술자 / 회계사 / 건축기사)",
-    "서비스 전문(상담사 / 심리치료사 / 사회복지사 / 코디네이터)",
-    "일반 사무 (사무직원 / 경리 / 비서 / 고객 상담 / 문서 관리)",
-    "영업(영업사원 / 마케팅 지원 / 고객 관리)",
-    "판매(점원 / 슈퍼 / 편의점 직원 / 백화점 직원)",
-    "생산/제조(공장 생산직 / 조립공 / 기계조작원 / 용접공)",
-    "시설(배관공 / 전기공 / 건설노무자 / 목수)",
-    "농림수산업(농부 / 축산업 / 어부 / 임업 종사자)",
-    "운송/기계(트럭기사 / 버스기사 / 지게차 운전 / 기계조작원)",
-    "청소 / 경비(경비원 / 환경미화원)",
-    "학생 (초·중·고·대학생 / 대학원생)",
-    "전업주부",
-    "구직자 / 최근 퇴사자 / 프리랜서",
-    "기타",
-]
-HOBBIES = ["독서", "음악 감상", "영화/드라마 감상", "게임 (PC/콘솔/모바일)", "운동/스포츠 관람",
-           "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래"]
-OCCUPATION_MAJORS = ["교육", "법률/행정", "연구개발/ IT", "예술/디자인", "의학/보건", "기타"]
-OCC_TO_MAJOR = {
-    "경영자(CEO / 사업주 / 임원 / 부서장)": "기타",
-    "행정관리(공공기관 관리자 / 기업 행정팀장 / 프로젝트 매니저)": "법률/행정",
-    "보건(의사 / 치과의사 / 약사 / 간호사 / 한의사 / 물리치료사 / 간호조무사 / 재활치료사 / 요양보호사)": "의학/보건",
-    "법률/행정(변호사 / 판사 / 검사 / 세무사 / 행정사)": "법률/행정",
-    "교육(교수 / 교사 / 학원강사 / 연구원)": "교육",
-    "연구개발/ IT(엔지니어 / 연구원 / 소프트웨어 개발자 / 데이터 분석가)": "연구개발/ IT",
-    "예술/디자인(디자이너 / 예술가 / 작가 / 사진작가)": "예술/디자인",
+# --- 데이터 정의 (예시) ---
+# 노인 멘토 데이터
+mentors_data = {
+    'ID': [101, 102, 103, 104],
+    '이름': ['김철수', '이영희', '박민수', '정숙자'],
+    '나이': [65, 72, 68, 75],
+    '전문 분야': ['요리', '목공', '컴퓨터 활용', '뜨개질'],
+    '희망 멘티 수': [2, 1, 3, 2],
+    '현재 멘티 수': [0, 0, 0, 0]
 }
+mentors_df = pd.DataFrame(mentors_data)
 
-# ==============================
-# 2) 기본 UI 스타일
-# ==============================
-BACKGROUND_FILE = "logo_gyeol.png"
-@st.cache_data(show_spinner=False)
-def get_background_data_url() -> str | None:
-    p = Path(__file__).resolve().parent / BACKGROUND_FILE
-    if not p.is_file(): return None
-    mime, _ = mimetypes.guess_type(p.name)
-    mime = mime or "image/png"
-    data = p.read_bytes()
-    b64 = b64encode(data).decode("ascii")
-    return f"data:{mime};base64,{b64}"
+# 청년 멘티 데이터
+mentees_data = {
+    'ID': [201, 202, 203, 204, 205, 206],
+    '이름': ['최지훈', '한예슬', '강태오', '윤아름', '서준영', '오민지'],
+    '나이': [24, 28, 22, 30, 25, 27],
+    '희망 분야': ['요리', '컴퓨터 활용', '목공', '뜨개질', '요리', '컴퓨터 활용'],
+    '매칭 상태': ['대기', '대기', '대기', '대기', '대기', '대기']
+}
+mentees_df = pd.DataFrame(mentees_data)
 
-def inject_style():
-    data_url = get_background_data_url()
-    bg_style = f"background-image: url('{data_url}'); background-size: cover; background-position: center; background-attachment: fixed;" if data_url \
-               else "background: radial-gradient(circle at 30% 30%, #14193F, #1B1F4B 25%, #10142C 60%, #080A1A 100%);"
-    st.markdown(f"""
-    <style>
-      [data-testid="stAppViewContainer"] {{ {bg_style} }}
-      [data-testid="stHeader"] {{ background: transparent; }}
-      .block-container {{
-        max-width: 900px;
-        padding: 2.25rem 2rem 3rem;
-        background: rgba(255,255,255,0.72);
-        border-radius: 20px;
-        backdrop-filter: blur(4px);
-        box-shadow: 0 6px 22px rgba(0,0,0,0.12);
-      }}
-    </style>
-    """, unsafe_allow_html=True)
+# 세션 상태에 데이터 초기화
+if 'mentors_df' not in st.session_state:
+    st.session_state.mentors_df = mentors_df.copy()
+if 'mentees_df' not in st.session_state:
+    st.session_state.mentees_df = mentees_df.copy()
+if 'matches' not in st.session_state:
+    st.session_state.matches = [] # 매칭 결과 저장 리스트: [(멘토ID, 멘티ID, 분야), ...]
 
-# ==============================
-# 3) CSV 로딩
-# ==============================
-@st.cache_data(show_spinner=False)
-def load_default_csv() -> pd.DataFrame:
-    for path in ["/mnt/data/멘토더미.csv", "멘토더미.csv"]:
-        for enc in ["utf-8-sig","utf-8","cp949"]:
-            try:
-                df = pd.read_csv(path, encoding=enc)
-                if not df.empty: return df
-            except: continue
-    return pd.DataFrame([{
-        "name":"김샘","gender":"남","age_band":"만 60세~69세",
-        "occupation_major":"교육","purpose":"사회, 인생 경험 공유, 정서적 지지와 대화",
-        "interests":"독서, 인문학","intro":"경청 중심의 상담을 합니다."
-    }])
+# --- 매칭 로직 함수 ---
+def perform_matching():
+    """조건에 맞는 멘토-멘티를 매칭하고 결과를 업데이트합니다."""
+    
+    # 멘토/멘티 DataFrame을 최신 상태로 가져옵니다.
+    current_mentors = st.session_state.mentors_df
+    current_mentees = st.session_state.mentees_df
+    
+    new_matches = []
+    
+    # 매칭 가능한 멘티만 필터링합니다.
+    available_mentees = current_mentees[current_mentees['매칭 상태'] == '대기'].copy()
+    
+    # 멘토를 순회하며 멘티를 매칭합니다.
+    for index, mentor in current_mentors.iterrows():
+        mentor_id = mentor['ID']
+        required_field = mentor['전문 분야']
+        available_slots = mentor['희망 멘티 수'] - mentor['현재 멘티 수']
+        
+        if available_slots > 0:
+            # 멘토의 전문 분야와 멘티의 희망 분야가 일치하는 멘티를 찾습니다.
+            potential_mentees = available_mentees[available_mentees['희망 분야'] == required_field]
+            
+            # 무작위로 멘티를 선택하여 매칭합니다. (랜덤성을 부여하여 매칭)
+            if not potential_mentees.empty:
+                # 필요한 멘티 수와 실제 가능한 멘티 수 중 작은 값을 선택
+                match_count = min(available_slots, len(potential_mentees))
+                
+                # 무작위로 멘티 선택
+                mentees_to_match = potential_mentees.sample(n=match_count, random_state=42)
+                
+                for _, mentee in mentees_to_match.iterrows():
+                    mentee_id = mentee['ID']
+                    
+                    # 매칭 결과 추가
+                    new_matches.append((mentor_id, mentee_id, required_field))
+                    
+                    # DataFrame 업데이트: 멘토 현재 멘티 수 증가
+                    current_mentors.loc[current_mentors['ID'] == mentor_id, '현재 멘티 수'] += 1
+                    
+                    # DataFrame 업데이트: 멘티 매칭 상태 변경
+                    current_mentees.loc[current_mentees['ID'] == mentee_id, '매칭 상태'] = '매칭 완료'
+                    
+                    # 매칭된 멘티는 다음 멘토에게는 매칭되지 않도록 available_mentees에서 제거
+                    available_mentees = available_mentees[available_mentees['ID'] != mentee_id]
 
-# ==============================
-# 4) 매칭 계산
-# ==============================
-def list_to_set(s): return {x.strip() for x in str(s).replace(";",",").split(",") if x.strip()} if pd.notna(s) else set()
-def ratio_overlap(a,b): return len(a & b)/len(a|b) if a and b else 0
-def tfidf_similarity(a,b):
-    a,b=(a or "").strip(),(b or "").strip()
-    if not a or not b: return 0.0
-    v=TfidfVectorizer(max_features=400,ngram_range=(1,2));X=v.fit_transform([a,b])
-    return float(cosine_similarity(X[0],X[1])[0,0])
-def map_occ_to_major(selected): return {OCC_TO_MAJOR.get(o,"기타") for o in selected}
-def compute_score(mentee,m):
-    s=lambda k:list_to_set(m.get(k,""));maj=(m.get("occupation_major","") or "").strip()
-    return int(round(
-        ratio_overlap(mentee["purpose"],s("purpose"))*30 +
-        ratio_overlap(mentee["interests"],s("interests"))*25 +
-        (25 if maj in mentee["pref_majors"] else 0) +
-        (10 if maj in mentee["mapped_majors"] else 0) +
-        tfidf_similarity(mentee["note"],m.get("intro",""))*10
-    ))
+    st.session_state.mentors_df = current_mentors
+    st.session_state.mentees_df = current_mentees
+    st.session_state.matches.extend(new_matches)
+    
+    return len(new_matches)
 
-# ==============================
-# 5) 상태 초기화 & 라우팅
-# ==============================
-if "view" not in st.session_state: st.session_state["view"]="match"
-if "chat_log" not in st.session_state: st.session_state["chat_log"]={}
-def goto(view:str): st.session_state["view"]=view; st.rerun()
+# --- Streamlit UI 구성 ---
+st.title("👵👴 세대 간 멘토-멘티 매칭 플랫폼 🧑‍💻")
+st.caption("노인 멘토와 청년 멘티를 위한 매칭 시뮬레이션")
 
-# ==============================
-# 6) 멘토 자동 응답 생성
-# ==============================
-def mentor_autoreply(row, mentee_note=""):
-    name=row.get("name","멘토")
-    style=row.get("communication_style","편안한 대화")
-    intro=row.get("intro","반가워요.")
-    purp=row.get("purpose","")
-    greet=f"안녕하세요, {name} 멘토입니다 😊\n\n{intro}"
-    add=f"\n\n제가 주로 도와드릴 수 있는 분야는 '{purp}'예요." if purp else ""
-    note=f"\n\n당신의 요청: “{mentee_note.strip()}” 확인했습니다." if mentee_note else ""
-    end=f"\n\n({style})"
-    return greet+add+note+end
+st.markdown("""
+<style>
+.stButton>button {
+    font-size: 1.2rem;
+    padding: 10px 20px;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# ==============================
-# 7) 채팅 화면
-# ==============================
-def view_chat():
-    partner = st.session_state.get("chat_partner","")
-    if not partner:
-        st.info("대화할 멘토를 선택해 주세요.")
-        if st.button("← 추천으로 돌아가기"): goto("match")
-        return
-    st.title(f"💬 {partner} 님과의 대화")
-    log = st.session_state["chat_log"].setdefault(partner,[])
-    for role,text,ts in log:
-        with st.chat_message("assistant" if role=="assistant" else "user"):
-            st.markdown(text)
-    msg = st.chat_input("메시지를 입력하세요")
-    if msg:
-        log.append(("user",msg,datetime.now().isoformat()))
-        reply=f"{partner}: 흥미로운 말씀이에요! 좀 더 자세히 말씀해 주실래요?"
-        log.append(("assistant",reply,datetime.now().isoformat()))
-        st.session_state["chat_log"][partner]=log
-        st.rerun()
-    if st.button("← 추천으로 돌아가기", use_container_width=True): goto("match")
 
-# ==============================
-# 8) 매칭 & 결과 (기본 뷰)
-# ==============================
-def view_match():
-    st.set_page_config(page_title="결: 멘티 데모", page_icon="🤝")
-    inject_style()
-    st.title("연결될 준비")
-    df=load_default_csv()
-    with st.form("mentee_form"):
-        purpose=st.multiselect("멘토링 목적", PURPOSES)
-        occ=st.multiselect("관심 있는 현재 직종", CURRENT_OCCUPATIONS)
-        pref=st.multiselect("선호 전공계열(멘토 전공)", OCCUPATION_MAJORS)
-        inter=st.multiselect("관심사/취미", HOBBIES)
-        note=st.text_area("한 줄 요청사항", placeholder="예) 간호사 퇴직하신 선배님을 찾습니다!")
-        submit=st.form_submit_button("추천 멘토 보기", use_container_width=True)
-    if not submit: st.stop()
+## 📊 현황 대시보드
 
-    mentee={"purpose":set(purpose),"interests":set(inter),"note":note,
-            "pref_majors":set(pref),"mapped_majors":map_occ_to_major(set(occ))}
-    scores=[{"idx":i,"score":compute_score(mentee,row)} for i,row in df.iterrows()]
-    ranked=sorted(scores,key=lambda x:x["score"],reverse=True)[:5]
+col1, col2, col3 = st.columns(3)
 
-    st.markdown("---")
-    st.subheader("추천 멘토 Top 5")
-    if not ranked: st.warning("추천 결과가 없습니다."); st.stop()
+with col1:
+    st.metric("총 멘토 수", len(st.session_state.mentors_df))
 
-    for i,it in enumerate(ranked,1):
-        r=df.loc[it["idx"]]
-        with st.container(border=True):
-            st.markdown(f"### #{i}. {r.get('name','(이름없음)')} · {r.get('age_band','')}")
-            st.write(f"**직종:** {r.get('current_occupation','(미기재)')} / {r.get('occupation_major','(미기재)')}")
-            if "communication_style" in df.columns:
-                st.write(f"**소통 스타일:** {r.get('communication_style','')}")
-            st.write(f"**소개:** {r.get('intro','')}")
-            if st.button(f"💬 {r.get('name','')} 님에게 대화 신청하기", key=f"chat_{i}", use_container_width=True):
-                st.session_state["chat_partner"]=r.get("name","")
-                log=st.session_state["chat_log"].setdefault(r.get("name",""),[])
-                auto=mentor_autoreply(r,mentee["note"])
-                log.append(("assistant",auto,datetime.now().isoformat()))
-                st.session_state["chat_log"][r.get("name","")]=log
-                goto("chat")
+with col2:
+    st.metric("총 멘티 수", len(st.session_state.mentees_df))
 
-# ==============================
-# 9) 실행
-# ==============================
-if st.session_state["view"]=="chat":
-    view_chat()
-else:
-    view_match()
+with col3:
+    st.metric("총 매칭 건수", len(st.session_state.matches))
+
+st.divider()
+
+## 🛠️ 매칭 기능
+
+st.header("멘토-멘티 매칭")
+st.write("아래 버튼을 누르면, **전문 분야**와 **희망 분야**가 일치하고 **멘토의 여유 슬롯**이 있는 경우에 한하여 매칭을 시도합니다.")
+
+if st.button("🔄 매칭 실행하기"):
+    matched_count = perform_matching()
+    if matched_count > 0:
+        st.success(f"✅ 새로운 매칭 **{matched_count}건**이 완료되었습니다!")
+    else:
+        st.info("⚠️ 현재 조건에서 추가로 매칭 가능한 건이 없습니다.")
+
+st.divider()
+
+## 📝 데이터 현황
+
+st.header("데이터 현황")
+
+tab1, tab2, tab3 = st.tabs(["노인 멘토 목록", "청년 멘티 목록", "매칭 결과"])
+
+with tab1:
+    st.subheader("노인 멘토 목록")
+    st.dataframe(st.session_state.mentors_df, use_container_width=True)
+    
+with tab2:
+    st.subheader("청년 멘티 목록")
+    st.dataframe(st.session_state.mentees_df, use_container_width=True)
+
+with tab3:
+    st.subheader("매칭 결과")
+    if st.session_state.matches:
+        # 매칭 결과를 DataFrame으로 변환하여 표시
+        matches_df = pd.DataFrame(st.session_state.matches, columns=['멘토 ID', '멘티 ID', '매칭 분야'])
+        
+        # 멘토/멘티 이름을 매핑하여 가독성을 높입니다.
+        mentor_map = st.session_state.mentors_df.set_index('ID')['이름'].to_dict()
+        mentee_map = st.session_state.mentees_df.set_index('ID')['이름'].to_dict()
+        
+        matches_df['멘토 이름'] = matches_df['멘토 ID'].map(mentor_map)
+        matches_df['멘티 이름'] = matches_df['멘티 ID'].map(mentee_map)
+        
+        # 표시 순서 조정
+        display_df = matches_df[['멘토 이름', '멘티 이름', '매칭 분야', '멘토 ID', '멘티 ID']]
+        st.dataframe(display_df, use_container_width=True)
+    else:
+        st.info("아직 매칭 결과가 없습니다. '매칭 실행하기' 버튼을 눌러주세요.")
