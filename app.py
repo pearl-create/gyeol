@@ -2,160 +2,177 @@ import streamlit as st
 import pandas as pd
 import random
 
-# --- 데이터 정의 (예시) ---
-# 노인 멘토 데이터
-mentors_data = {
-    'ID': [101, 102, 103, 104],
-    '이름': ['김철수', '이영희', '박민수', '정숙자'],
-    '나이': [65, 72, 68, 75],
-    '전문 분야': ['요리', '목공', '컴퓨터 활용', '뜨개질'],
-    '희망 멘티 수': [2, 1, 3, 2],
-    '현재 멘티 수': [0, 0, 0, 0]
-}
-mentors_df = pd.DataFrame(mentors_data)
+# --- 1. 데이터 로드 및 정의 ---
 
-# 청년 멘티 데이터
-mentees_data = {
-    'ID': [201, 202, 203, 204, 205, 206],
-    '이름': ['최지훈', '한예슬', '강태오', '윤아름', '서준영', '오민지'],
-    '나이': [24, 28, 22, 30, 25, 27],
-    '희망 분야': ['요리', '컴퓨터 활용', '목공', '뜨개질', '요리', '컴퓨터 활용'],
-    '매칭 상태': ['대기', '대기', '대기', '대기', '대기', '대기']
-}
-mentees_df = pd.DataFrame(mentees_data)
+# 멘토 데이터 로드 (사용자가 제공한 CSV 파일 활용)
+# 파일 이름을 직접 사용합니다. Streamlit Cloud나 Jupyter 환경이 아닌 경우,
+# 해당 파일이 app.py와 같은 폴더에 있어야 합니다.
+try:
+    mentor_csv_path = "멘토더미.csv"
+    mentors_df = pd.read_csv(mentor_csv_path)
+    
+    # 추천 로직에 사용할 주요 컬럼 이름을 명확히 합니다.
+    # mentor_df의 컬럼: name, gender, age_band, current_occupation, occupation_major, interests, purpose, topic_prefs, communication_style, intro
+    
+    # 예시로 사용할 멘티 데이터
+    mentees_data = {
+        'ID': [201, 202, 203],
+        '이름': ['청년 멘티 A', '청년 멘티 B', '청년 멘티 C'],
+        '희망 분야': ['연구개발/ IT', '예술/디자인', '일반 사무'], # occupation_major와 매칭
+        '희망 주제': ['IT·테크', '예술·문화', '진로·직업'], # topic_prefs와 매칭
+        '희망 대화 스타일': ['효율추구형', '댕댕이형', '연두부형'] # communication_style와 매칭
+    }
+    mentees_df = pd.DataFrame(mentees_data)
+
+except FileNotFoundError:
+    st.error(f"Error: 멘토 데이터 파일 '{mentor_csv_path}'을(를) 찾을 수 없습니다. 파일 경로를 확인해 주세요.")
+    st.stop()
+except Exception as e:
+    st.error(f"멘토 데이터 로드 중 오류 발생: {e}")
+    st.stop()
+
 
 # 세션 상태에 데이터 초기화
 if 'mentors_df' not in st.session_state:
+    # 추천 로직을 위한 전처리: topic_prefs와 communication_style은 여러 값이 있을 수 있으므로
+    # 이후 매칭 로직에서 이를 고려해야 합니다.
     st.session_state.mentors_df = mentors_df.copy()
 if 'mentees_df' not in st.session_state:
     st.session_state.mentees_df = mentees_df.copy()
-if 'matches' not in st.session_state:
-    st.session_state.matches = [] # 매칭 결과 저장 리스트: [(멘토ID, 멘티ID, 분야), ...]
+if 'recommendations' not in st.session_state:
+    st.session_state.recommendations = [] # 추천 결과 저장
 
-# --- 매칭 로직 함수 ---
-def perform_matching():
-    """조건에 맞는 멘토-멘티를 매칭하고 결과를 업데이트합니다."""
+# --- 2. 멘토 추천 로직 함수 ---
+
+def recommend_mentors(field, topic, style):
+    """
+    멘티의 희망 조건에 따라 멘토를 점수 기반으로 추천합니다.
+    - 점수 부여 기준: 분야(3점) > 주제(2점) > 대화 스타일(1점)
+    """
     
-    # 멘토/멘티 DataFrame을 최신 상태로 가져옵니다.
-    current_mentors = st.session_state.mentors_df
-    current_mentees = st.session_state.mentees_df
+    mentors = st.session_state.mentors_df.copy()
+    mentors['score'] = 0
     
-    new_matches = []
+    # 1. 희망 분야 (occupation_major) 매칭: 3점
+    mentors['score'] += mentors['occupation_major'].apply(lambda x: 3 if x == field else 0)
     
-    # 매칭 가능한 멘티만 필터링합니다.
-    available_mentees = current_mentees[current_mentees['매칭 상태'] == '대기'].copy()
+    # 2. 희망 주제 (topic_prefs) 매칭: 2점
+    # topic_prefs는 콤마로 구분된 여러 값일 수 있습니다.
+    mentors['score'] += mentors['topic_prefs'].astype(str).apply(
+        lambda x: 2 if topic in x else 0
+    )
     
-    # 멘토를 순회하며 멘티를 매칭합니다.
-    for index, mentor in current_mentors.iterrows():
-        mentor_id = mentor['ID']
-        required_field = mentor['전문 분야']
-        available_slots = mentor['희망 멘티 수'] - mentor['현재 멘티 수']
+    # 3. 희망 대화 스타일 (communication_style) 매칭: 1점
+    mentors['score'] += mentors['communication_style'].apply(lambda x: 1 if x == style else 0)
+    
+    # 점수가 0점 이상인 멘토만 필터링하고 점수 순으로 정렬
+    recommended_mentors = mentors[mentors['score'] > 0].sort_values(by='score', ascending=False)
+    
+    # 상위 5명 (또는 그 이하) 추천
+    return recommended_mentors.head(5).reset_index(drop=True)
+
+
+# --- 3. Streamlit UI 구성 ---
+
+st.title("👵👴 세대 간 멘토 추천 플랫폼 🧑‍💻")
+st.caption("청년 멘티의 조건에 가장 적합한 노인 멘토를 추천합니다.")
+
+## 🛠️ 멘티 조건 검색 및 멘토 추천
+
+st.header("멘토 추천받기")
+st.write("청년 멘티가 희망하는 조건을 선택하여 적합한 멘토를 찾아보세요.")
+
+# 멘토 데이터에서 사용 가능한 옵션 추출
+available_fields = sorted(mentors_df['occupation_major'].unique().tolist())
+# topic_prefs는 여러 값이 있으므로, 모든 유니크한 값을 추출
+all_topics = set()
+mentors_df['topic_prefs'].astype(str).str.split('[,;]').apply(lambda x: all_topics.update([t.strip() for t in x if t.strip()]))
+available_topics = sorted([t for t in all_topics if t])
+available_styles = sorted(mentors_df['communication_style'].unique().tolist())
+
+
+with st.form("mentor_recommendation_form"):
+    
+    col_f, col_t, col_s = st.columns(3)
+    
+    with col_f:
+        selected_field = st.selectbox(
+            "💼 1. 희망 멘토 분야 (가장 중요)",
+            options=['선택 안 함'] + available_fields
+        )
+    
+    with col_t:
+        selected_topic = st.selectbox(
+            "💬 2. 희망 대화 주제",
+            options=['선택 안 함'] + available_topics
+        )
         
-        if available_slots > 0:
-            # 멘토의 전문 분야와 멘티의 희망 분야가 일치하는 멘티를 찾습니다.
-            potential_mentees = available_mentees[available_mentees['희망 분야'] == required_field]
+    with col_s:
+        selected_style = st.selectbox(
+            "🗣️ 3. 희망 대화 스타일",
+            options=['선택 안 함'] + available_styles
+        )
+
+    submitted = st.form_submit_button("🌟 추천 멘토 찾기")
+    
+    if submitted:
+        # '선택 안 함'을 제외하고 실제 값만 전달
+        search_field = selected_field if selected_field != '선택 안 함' else ''
+        search_topic = selected_topic if selected_topic != '선택 안 함' else ''
+        search_style = selected_style if selected_style != '선택 안 함' else ''
+        
+        if not search_field and not search_topic and not search_style:
+            st.warning("⚠️ 멘토 추천을 위해 최소한 하나의 조건을 선택해 주세요.")
+        else:
+            with st.spinner("최적의 멘토를 찾는 중..."):
+                recommendation_results = recommend_mentors(search_field, search_topic, search_style)
+                st.session_state.recommendations = recommendation_results
             
-            # 무작위로 멘티를 선택하여 매칭합니다. (랜덤성을 부여하여 매칭)
-            if not potential_mentees.empty:
-                # 필요한 멘티 수와 실제 가능한 멘티 수 중 작은 값을 선택
-                match_count = min(available_slots, len(potential_mentees))
-                
-                # 무작위로 멘티 선택
-                mentees_to_match = potential_mentees.sample(n=match_count, random_state=42)
-                
-                for _, mentee in mentees_to_match.iterrows():
-                    mentee_id = mentee['ID']
-                    
-                    # 매칭 결과 추가
-                    new_matches.append((mentor_id, mentee_id, required_field))
-                    
-                    # DataFrame 업데이트: 멘토 현재 멘티 수 증가
-                    current_mentors.loc[current_mentors['ID'] == mentor_id, '현재 멘티 수'] += 1
-                    
-                    # DataFrame 업데이트: 멘티 매칭 상태 변경
-                    current_mentees.loc[current_mentees['ID'] == mentee_id, '매칭 상태'] = '매칭 완료'
-                    
-                    # 매칭된 멘티는 다음 멘토에게는 매칭되지 않도록 available_mentees에서 제거
-                    available_mentees = available_mentees[available_mentees['ID'] != mentee_id]
-
-    st.session_state.mentors_df = current_mentors
-    st.session_state.mentees_df = current_mentees
-    st.session_state.matches.extend(new_matches)
-    
-    return len(new_matches)
-
-# --- Streamlit UI 구성 ---
-st.title("👵👴 세대 간 멘토-멘티 매칭 플랫폼 🧑‍💻")
-st.caption("노인 멘토와 청년 멘티를 위한 매칭 시뮬레이션")
-
-st.markdown("""
-<style>
-.stButton>button {
-    font-size: 1.2rem;
-    padding: 10px 20px;
-}
-</style>
-""", unsafe_allow_html=True)
-
-
-## 📊 현황 대시보드
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.metric("총 멘토 수", len(st.session_state.mentors_df))
-
-with col2:
-    st.metric("총 멘티 수", len(st.session_state.mentees_df))
-
-with col3:
-    st.metric("총 매칭 건수", len(st.session_state.matches))
+            if not recommendation_results.empty:
+                st.success(f"✅ 조건에 가장 적합한 멘토 **{len(recommendation_results)}명**을 찾았습니다!")
+            else:
+                st.info("⚠️ 현재 선택하신 조건에 맞는 멘토가 없습니다. 조건을 바꿔서 다시 검색해 보세요.")
 
 st.divider()
 
-## 🛠️ 매칭 기능
+## 📝 추천 결과 표시
 
-st.header("멘토-멘티 매칭")
-st.write("아래 버튼을 누르면, **전문 분야**와 **희망 분야**가 일치하고 **멘토의 여유 슬롯**이 있는 경우에 한하여 매칭을 시도합니다.")
+st.header("추천 멘토 리스트")
 
-if st.button("🔄 매칭 실행하기"):
-    matched_count = perform_matching()
-    if matched_count > 0:
-        st.success(f"✅ 새로운 매칭 **{matched_count}건**이 완료되었습니다!")
-    else:
-        st.info("⚠️ 현재 조건에서 추가로 매칭 가능한 건이 없습니다.")
-
-st.divider()
-
-## 📝 데이터 현황
-
-st.header("데이터 현황")
-
-tab1, tab2, tab3 = st.tabs(["노인 멘토 목록", "청년 멘티 목록", "매칭 결과"])
-
-with tab1:
-    st.subheader("노인 멘토 목록")
-    st.dataframe(st.session_state.mentors_df, use_container_width=True)
+if st.session_state.recommendations is not None and not st.session_state.recommendations.empty:
     
-with tab2:
-    st.subheader("청년 멘티 목록")
-    st.dataframe(st.session_state.mentees_df, use_container_width=True)
-
-with tab3:
-    st.subheader("매칭 결과")
-    if st.session_state.matches:
-        # 매칭 결과를 DataFrame으로 변환하여 표시
-        matches_df = pd.DataFrame(st.session_state.matches, columns=['멘토 ID', '멘티 ID', '매칭 분야'])
+    recommended_df = st.session_state.recommendations.rename(columns={
+        'name': '멘토 이름',
+        'age_band': '연령대',
+        'occupation_major': '전문 분야',
+        'topic_prefs': '주요 관심 주제',
+        'communication_style': '대화 스타일',
+        'intro': '멘토 소개글',
+        'score': '추천 점수'
+    })
+    
+    # 보여줄 컬럼 선택 및 순서 조정
+    display_cols = [
+        '멘토 이름', '추천 점수', '전문 분야', '주요 관심 주제', 
+        '대화 스타일', '연령대', '멘토 소개글'
+    ]
+    
+    # 멘토 카드 형식으로 표시
+    for index, row in recommended_df.iterrows():
+        st.subheader(f"{index + 1}. {row['멘토 이름']} (추천 점수: {int(row['추천 점수'])}점)")
         
-        # 멘토/멘티 이름을 매핑하여 가독성을 높입니다.
-        mentor_map = st.session_state.mentors_df.set_index('ID')['이름'].to_dict()
-        mentee_map = st.session_state.mentees_df.set_index('ID')['이름'].to_dict()
+        # 메트릭스 형태로 핵심 정보 요약
+        col_m1, col_m2, col_m3 = st.columns(3)
+        with col_m1:
+            st.metric("전문 분야", row['전문 분야'])
+        with col_m2:
+            st.metric("대화 스타일", row['대화 스타일'])
+        with col_m3:
+            st.metric("연령대", row['연령대'])
+            
+        st.markdown(f"**주요 관심 주제:** `{row['주요 관심 주제']}`")
+        st.markdown(f"**멘토 소개:** _{row['멘토 소개글']}_")
+        st.markdown("---")
         
-        matches_df['멘토 이름'] = matches_df['멘토 ID'].map(mentor_map)
-        matches_df['멘티 이름'] = matches_df['멘티 ID'].map(mentee_map)
-        
-        # 표시 순서 조정
-        display_df = matches_df[['멘토 이름', '멘티 이름', '매칭 분야', '멘토 ID', '멘티 ID']]
-        st.dataframe(display_df, use_container_width=True)
-    else:
-        st.info("아직 매칭 결과가 없습니다. '매칭 실행하기' 버튼을 눌러주세요.")
+else:
+    st.info("조건을 선택하고 '🌟 추천 멘토 찾기' 버튼을 눌러 추천을 시작해 주세요.")
