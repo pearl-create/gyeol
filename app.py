@@ -62,29 +62,23 @@ def load_mentor_data():
     """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다."""
     if os.path.exists(MENTOR_CSV_PATH):
         try:
-            # 멘토 CSV 파일이 UTF-8로 인코딩되어 있다고 가정합니다.
             df = pd.read_csv(MENTOR_CSV_PATH, encoding='utf-8')
+            df.columns = df.columns.str.strip() 
             
-            # **KeyError 해결 핵심:** communication_style 컬럼이 공백이나 인코딩 문제로 인식되지 않을 수 있으므로
-            # 컬럼 이름을 표준화하고 필요한 컬럼이 있는지 확인합니다.
-            df.columns = df.columns.str.strip() # 컬럼 이름의 앞뒤 공백 제거
-            
-            # 멘토 데이터에 필요한 핵심 컬럼 목록
-            required_cols = ['name', 'age_band', 'occupation_major', 'topic_prefs', 'communication_style', 'intro']
+            # **수정된 핵심:** 파일 컬럼명에 맞게 required_cols를 업데이트
+            required_cols = ['name', 'age_band', 'occupation_major', 'topic_prefs', 'style', 'intro'] 
             
             missing_cols = [col for col in required_cols if col not in df.columns]
 
             if missing_cols:
-                # 파일에 필요한 컬럼이 없는 경우
                 st.error(f"멘토 CSV 파일에 다음 컬럼이 누락되었습니다: {', '.join(missing_cols)}")
                 st.info(f"현재 파일의 컬럼 목록: {', '.join(df.columns)}")
-                return pd.DataFrame() # 빈 DataFrame 반환
+                return pd.DataFrame() 
 
             return df
         except UnicodeDecodeError:
             st.warning("CSV 파일 인코딩 오류가 발생했습니다. 'cp949'로 재시도합니다.")
             try:
-                # 한국어 환경에서 자주 사용되는 인코딩으로 재시도
                 df = pd.read_csv(MENTOR_CSV_PATH, encoding='cp949')
                 df.columns = df.columns.str.strip()
                 return df
@@ -98,12 +92,12 @@ def load_mentor_data():
         st.error(f"Error: 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 찾을 수 없습니다. 파일을 업로드하고 다시 시도해 주세요.")
         return pd.DataFrame()
 
+# 세션 상태 초기화
 def initialize_session_state():
     mentors_df = load_mentor_data()
     
     # 멘토 데이터가 로드된 경우에만 저장
-    if not mentors_df.empty:
-        st.session_state.mentors_df = mentors_df
+    st.session_state.mentors_df = mentors_df # 항상 저장 (비어있을 수도 있음)
     
     if 'is_registered' not in st.session_state:
         st.session_state.is_registered = False
@@ -114,26 +108,31 @@ def initialize_session_state():
     
 initialize_session_state()
 
-# 멘토 데이터가 로드되지 않았으면 앱 실행 중지
+# 멘토 데이터 로드 실패 시 강제 종료
 if st.session_state.mentors_df.empty and not st.session_state.is_registered:
     st.stop()
     
-# --- 3. 멘토 추천 로직 함수 (이전과 동일) ---
+# --- 3. 멘토 추천 로직 함수 (컬럼 이름 'style'로 수정) ---
 
 def recommend_mentors(search_field, search_topic, search_style):
+    """멘티의 희망 조건에 따라 멘토를 점수 기반으로 추천합니다."""
+    
     mentors = st.session_state.mentors_df.copy()
     mentors['score'] = 0
     
+    # 1. 희망 분야 (occupation_major) 매칭: 3점
     if search_field:
         mentors['score'] += mentors['occupation_major'].apply(lambda x: 3 if x == search_field else 0)
     
+    # 2. 희망 주제 (topic_prefs) 매칭: 2점
     if search_topic:
         mentors['score'] += mentors['topic_prefs'].astype(str).apply(
             lambda x: 2 if search_topic in x else 0
         )
     
+    # 3. 희망 대화 스타일 ('style' 컬럼으로 수정) 매칭: 1점
     if search_style:
-        mentors['score'] += mentors['communication_style'].apply(lambda x: 1 if x == search_style else 0)
+        mentors['score'] += mentors['style'].apply(lambda x: 1 if search_style in x else 0)
     
     if search_field or search_topic or search_style:
         recommended_mentors = mentors[mentors['score'] > 0].sort_values(by='score', ascending=False)
@@ -192,7 +191,7 @@ def show_registration_form():
         )
         selected_style = selected_style_full.split(':')[0]
         
-        submitted = st.form_submit_button("가입 완료 및 서비스 시작") # 폼 안에 버튼 배치
+        submitted = st.form_submit_button("가입 완료 및 서비스 시작") 
 
         if submitted:
             if not name or not available_days or not available_times or not selected_topics or not selected_style:
@@ -223,7 +222,6 @@ def show_mentor_search_and_connect():
     # --- 검색 조건 입력 ---
     st.subheader("나에게 맞는 멘토 검색하기")
     
-    # Missing Submit Button 경고를 없애기 위해 st.form() 안에 st.form_submit_button()을 위치시킵니다.
     with st.form("mentor_search_form"): 
         col_f, col_t, col_s = st.columns(3)
         
@@ -232,7 +230,9 @@ def show_mentor_search_and_connect():
         all_topics = set()
         mentors['topic_prefs'].astype(str).str.split('[,;]').apply(lambda x: all_topics.update([t.strip() for t in x if t.strip()]))
         available_topics = sorted([t for t in all_topics if t])
-        available_styles = sorted(mentors['communication_style'].unique().tolist())
+        
+        # **수정 핵심:** 'style' 컬럼을 사용하여 옵션 추출
+        available_styles = sorted(mentors['style'].astype(str).str.split(':').str[0].str.strip().unique().tolist())
         
         with col_f:
             search_field = st.selectbox("💼 전문 분야", options=['(전체)'] + available_fields)
@@ -243,7 +243,7 @@ def show_mentor_search_and_connect():
         with col_s:
             search_style = st.selectbox("🗣️ 선호 대화 스타일", options=['(전체)'] + available_styles)
 
-        submitted = st.form_submit_button("🔎 검색 시작") # 폼 안에 버튼 배치
+        submitted = st.form_submit_button("🔎 검색 시작") 
         
     if submitted:
         field = search_field if search_field != '(전체)' else ''
@@ -280,7 +280,8 @@ def show_mentor_search_and_connect():
                 with col_m2:
                     st.markdown(f"**주요 주제:** {row['topic_prefs']}")
                 with col_m3:
-                    st.markdown(f"**소통 스타일:** {row['communication_style']}")
+                    # **수정 핵심:** 'style' 컬럼 사용
+                    st.markdown(f"**소통 스타일:** {row['style']}") 
                     
                 st.markdown(f"**멘토 한마디:** _{row['intro']}_")
                 
@@ -302,7 +303,6 @@ def show_daily_question():
     daily_q = "🤔 **'내가 만약 20대로 돌아간다면, 지금의 나에게 가장 해주고 싶은 조언은 무엇인가요?'**"
     st.subheader(daily_q)
     
-    # --- 답변 리스트 (더미 데이터) ---
     sample_answers = [
         {"나이대": "만 90세 이상", "이름": "진오", "답변": "너무 서두르지 말고, 꾸준함이 기적을 만든다는 것을 기억해라. 건강이 최고다."},
         {"나이대": "만 20세~29세", "이름": st.session_state.user_profile.get('name', '청년 멘티'), "답변": "남들이 간다고 무조건 따라가지 말고, 나만의 속도를 찾는 용기가 필요하다고 말해주고 싶어요."},
@@ -315,7 +315,6 @@ def show_daily_question():
             
     st.divider()
     
-    # --- 답변 작성 폼 ---
     st.subheader("나의 답변 작성하기")
     with st.form("answer_form"):
         answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
@@ -338,9 +337,10 @@ def main():
     )
 
     if st.session_state.mentors_df.empty and not st.session_state.is_registered:
+        st.title("👵👴 플랫폼 준비 중 🧑‍💻")
+        st.error("⚠️ 멘토 데이터를 로드하지 못했습니다. `멘토더미.csv` 파일을 확인해 주세요.")
         st.stop()
 
-    # --- 연결 프로세스 처리 ---
     if st.session_state.get('connecting'):
         mentor_name = st.session_state.connect_mentor_name
         
@@ -364,8 +364,6 @@ def main():
         st.stop() 
 
 
-    # --- 메인 페이지 흐름 제어 ---
-    
     st.sidebar.title("메뉴")
     
     if not st.session_state.is_registered:
