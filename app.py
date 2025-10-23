@@ -177,4 +177,259 @@ def show_registration_form():
         
         col_day, col_time = st.columns(2)
         with col_day:
-            available
+            available_days = st.multiselect("소통 가능한 요일", WEEKDAYS)
+        with col_time:
+            available_times = st.multiselect("소통 가능한 시간대", TIMES)
+        
+        st.subheader("현재 직종")
+        occupation_key = st.selectbox("현재 직종 분류", list(OCCUPATION_GROUPS.keys()))
+        
+        st.subheader("선호하는 대화 주제")
+        selected_topics = st.multiselect(
+            "멘토링에서 주로 어떤 주제에 대해 이야기하고 싶으신가요?", 
+            TOPIC_PREFS
+        )
+
+        st.subheader("선호하는 소통 스타일")
+        comm_style_options = [f"{k}: {v}" for k, v in COMM_STYLES.items()]
+        selected_style_full = st.radio(
+            "평소 대화 시 본인과 비슷하거나 선호하는 스타일을 선택해주세요", 
+            comm_style_options,
+            key="comm_style_radio"
+        )
+        selected_style = selected_style_full.split(':')[0]
+        
+        submitted = st.form_submit_button("가입 완료 및 서비스 시작") 
+
+        if submitted:
+            if not name or not available_days or not available_times or not selected_topics or not selected_style:
+                st.error("이름, 소통 가능 요일/시간, 주제, 소통 스타일은 필수 입력 항목입니다.")
+            elif name in st.session_state.all_users:
+                st.error(f"'{name}' 이름은 이미 등록되어 있습니다. 다른 이름을 사용하거나 로그인해 주세요.")
+            else:
+                user_profile_data = {
+                    "name": name,
+                    "gender": gender,
+                    "age_band": age_band,
+                    "comm_method": comm_method,
+                    "available_days": available_days,
+                    "available_times": available_times,
+                    "occupation_group": occupation_key,
+                    "topic_prefs": selected_topics,
+                    "comm_style": selected_style
+                }
+                
+                st.session_state.all_users[name] = user_profile_data
+                st.session_state.user_profile = user_profile_data
+                st.session_state.logged_in = True
+                
+                st.success(f"🎉 {name}님, 성공적으로 가입 및 로그인되었습니다!")
+                st.rerun() 
+
+def show_mentor_search_and_connect():
+    """멘토 검색 및 연결 기능을 표시합니다."""
+    st.header("🔍 멘토 찾기 및 연결")
+    
+    mentors = st.session_state.mentors_df
+    
+    # --- 검색 조건 입력 ---
+    st.subheader("나에게 맞는 멘토 검색하기")
+    
+    with st.form("mentor_search_form"): 
+        col_f, col_t, col_s = st.columns(3)
+        
+        available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
+        available_styles = sorted(list(COMM_STYLES.keys()))
+        available_fields_clean = sorted(list(OCCUPATION_GROUPS.keys()))
+        
+        with col_f:
+            search_field = st.selectbox("💼 전문 분야 (직종 분류)", options=['(전체)'] + available_fields_clean)
+        
+        with col_t:
+            search_topic = st.selectbox("💬 주요 대화 주제", options=['(전체)'] + available_topics)
+            
+        with col_s:
+            search_style = st.selectbox("🗣️ 선호 대화 스타일", options=['(전체)'] + available_styles)
+
+        submitted = st.form_submit_button("🔎 검색 시작") 
+        
+    if submitted:
+        field = search_field if search_field != '(전체)' else ''
+        topic = search_topic if search_topic != '(전체)' else ''
+        style = search_style if search_style != '(전체)' else ''
+        
+        with st.spinner("최적의 멘토를 찾는 중..."):
+            recommendation_results = recommend_mentors(field, topic, style)
+            st.session_state.recommendations = recommendation_results
+        
+        if recommendation_results.empty and (field or topic or style):
+             st.info("⚠️ 선택하신 조건에 맞는 멘토를 찾지 못했습니다. 조건을 변경해 보세요.")
+        elif recommendation_results.empty:
+            st.info("멘토 데이터가 비어있습니다. 데이터를 확인해 주세요.")
+
+    # --- 검색 결과 표시 ---
+    if not st.session_state.recommendations.empty:
+        st.subheader(f"총 {len(st.session_state.recommendations)}명의 멘토가 검색되었습니다.")
+        if 'score' in st.session_state.recommendations.columns:
+             st.caption("(추천 점수 또는 이름순)")
+        
+        for index, row in st.session_state.recommendations.iterrows():
+            with st.container(border=True):
+                col_name, col_score = st.columns([3, 1])
+                with col_name:
+                    st.markdown(f"#### 👤 {row['name']} ({row['age_band']})")
+                with col_score:
+                    if 'score' in row and row['score'] > 0:
+                        st.markdown(f"**🌟 추천 점수: {int(row['score'])}점**")
+                
+                col_m1, col_m2, col_m3 = st.columns(3)
+                with col_m1:
+                    st.markdown(f"**전문 분야:** {row['occupation_major']}")
+                with col_m2:
+                    st.markdown(f"**주요 주제:** {row['topic_prefs']}")
+                with col_m3:
+                    st.markdown(f"**소통 스타일:** {row['style']}") 
+                    
+                st.markdown(f"**멘토 한마디:** _{row['intro']}_")
+                
+                connect_button_key = f"connect_btn_{row['name']}_{index}"
+                if st.button("🔗 연결", key=connect_button_key):
+                    st.session_state.connecting = True
+                    st.session_state.connect_mentor_name = row['name']
+                    st.rerun() 
+    
+    elif not submitted:
+        st.info("검색 조건을 입력하고 '🔎 검색 시작' 버튼을 눌러 멘토를 찾아보세요.")
+
+
+def show_daily_question():
+    """오늘의 질문 게시판을 표시하고, 답변을 누적하여 보여줍니다."""
+    st.header("💬 오늘의 질문: 세대 공감 창구")
+    st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
+    
+    daily_q = "🤔 **'내가 만약 20대로 돌아간다면, 지금의 나에게 가장 해주고 싶은 조언은 무엇인가요?'**"
+    st.subheader(daily_q)
+    
+    # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
+    if st.session_state.daily_answers:
+        # 최신 답변이 위로 오도록 역순 정렬
+        sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: 1, reverse=True) 
+        
+        for ans in sorted_answers:
+            with st.expander(f"[{ans['age_band']}] **{ans['name']}**님의 답변"):
+                st.write(ans['answer'])
+            
+    st.divider()
+    
+    # --- 답변 작성 폼 ---
+    st.subheader("나의 답변 작성하기")
+    current_name = st.session_state.user_profile.get('name', '익명')
+    current_age = st.session_state.user_profile.get('age_band', '미등록')
+    
+    with st.form("answer_form"):
+        answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
+        submitted = st.form_submit_button("답변 제출")
+        
+        if submitted:
+            if answer_text:
+                new_answer = {
+                    "name": current_name,
+                    "age_band": current_age,
+                    "answer": answer_text
+                }
+                st.session_state.daily_answers.append(new_answer)
+                
+                st.success("답변이 제출되었습니다. 페이지를 새로고침하면(R 키) 누적된 답변을 볼 수 있습니다.")
+                st.rerun() # 답변 즉시 반영을 위해 새로고침
+            else:
+                st.warning("답변 내용을 입력해 주세요.")
+            
+
+# --- 5. 메인 앱 실행 함수 ---
+
+def main():
+    # --- Streamlit 설정 ---
+    # Dark/Black 계열 배경을 위한 설정: Streamlit은 코드 내에서 배경색을 직접 지정하기 어렵습니다.
+    # .streamlit/config.toml 파일을 생성하여 아래 내용을 추가하면 Dark 모드와 파란색 계열의 배경이 적용됩니다.
+    # [theme]
+    # base="dark"
+    # primaryColor="#1E88E5"  # 파란색 계열의 버튼/링크 색상
+    # backgroundColor="#263238"  # 어두운 파란색 계열의 배경색 (선택 사항)
+    # secondaryBackgroundColor="#37474F" # 사이드바 배경색
+    
+    st.set_page_config(
+        page_title="세대 간 멘토링 플랫폼",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+
+    if st.session_state.mentors_df.empty and not st.session_state.logged_in:
+        st.title("👵👴 플랫폼 준비 중 🧑‍💻")
+        st.error("⚠️ 멘토 데이터를 로드하지 못했습니다. `멘토더미.csv` 파일을 확인해 주세요.")
+        st.stop()
+
+    # --- 연결 프로세스 처리 (연결 후 복귀 버튼 추가) ---
+    if st.session_state.get('connecting'):
+        mentor_name = st.session_state.connect_mentor_name
+        
+        st.info(f"🔗 **{mentor_name} 멘토**님과 화상 연결을 준비 중입니다. 잠시만 기다려주세요...")
+        time.sleep(2) 
+        st.balloons()
+        
+        st.markdown(
+            f"""
+            <script>
+                window.open('{GOOGLE_MEET_URL}', '_blank');
+            </script>
+            """, 
+            unsafe_allow_html=True
+        )
+        
+        st.success(f"✅ **{mentor_name} 멘토**님과의 화상 채팅 연결이 새로운 탭에서 시작되었습니다.")
+        st.markdown(f"**[Google Meet 연결 바로가기: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
+        
+        # **수정 핵심:** 뒤로가기 버튼 추가
+        if st.button("⬅️ 다른 멘토 찾아보기"):
+            st.session_state.connecting = False
+            del st.session_state.connect_mentor_name
+            st.rerun()
+        
+        st.stop() # 연결 페이지에 머무르게 함 (뒤로가기 버튼 누르기 전까지)
+
+    # --- 메인 페이지 흐름 제어 ---
+    st.sidebar.title("메뉴")
+    st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻")
+
+    if not st.session_state.logged_in:
+        # 로그인/회원가입 선택
+        auth_option = st.radio("서비스 시작", ["로그인", "회원 가입"], index=0, horizontal=True)
+        if auth_option == "로그인":
+            show_login_form()
+        else:
+            show_registration_form()
+            
+    else:
+        # 로그인된 사용자용 메인 화면
+        page = st.sidebar.radio(
+            "페이지 이동",
+            ["멘토 찾기", "오늘의 질문"],
+            index=0
+        )
+        
+        st.sidebar.divider()
+        st.sidebar.markdown(f"**환영합니다, {st.session_state.user_profile.get('name')}님!**")
+        st.sidebar.caption(f"나이대: {st.session_state.user_profile.get('age_band')}")
+        
+        if st.sidebar.button("🚪 로그아웃"):
+            st.session_state.logged_in = False
+            st.session_state.user_profile = {}
+            st.info("로그아웃되었습니다.")
+            st.rerun()
+
+        if page == "멘토 찾기":
+            show_mentor_search_and_connect()
+        elif page == "오늘의 질문":
+            show_daily_question()
+
+if __name__ == "__main__":
+    main()
