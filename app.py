@@ -11,7 +11,7 @@ MENTOR_CSV_PATH = "멘토더미.csv"
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
 GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy" 
 
-# --- 상수 및 옵션 정의 (이전과 동일) ---
+# --- 상수 및 옵션 정의 ---
 GENDERS = ["남", "여", "기타"]
 COMM_METHODS = ["대면 만남", "화상채팅", "일반 채팅"]
 WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
@@ -21,6 +21,8 @@ AGE_BANDS = [
     "만 40세~49세", "만 50세~59세", "만 60세~69세", 
     "만 70세~79세", "만 80세~89세", "만 90세 이상"
 ]
+
+# 🌟 직종 그룹: 대분류 리스트로 최종 변경 (CSV 파일의 occupation_major와 일치해야 함)
 OCCUPATION_GROUPS = [
     "경영·사무·금융·보험직",
     "연구직 및 공학기술직",
@@ -32,12 +34,14 @@ OCCUPATION_GROUPS = [
     "건설·채굴직",
     "설치·정비·생산직",
     "농림어업직",
-    "학생", 
-    "전업주부", 
+    # 특수 상황군 (CSV에 있는 값 기준)
+    "학생",
+    "전업주부",
     "구직/이직 준비",
     "프리랜서", 
     "기타"
 ]
+
 INTERESTS = {
     "여가/취미 관련": ["독서", "음악 감상", "영화/드라마 감상", "게임 (PC/콘솔/모바일)", "운동/스포츠 관람", "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래"],
     "학문/지적 관심사": ["인문학 (철학, 역사, 문학 등)", "사회과학 (정치, 경제, 사회, 심리 등)", "자연과학 (물리, 화학, 생명과학 등)", "수학/논리 퍼즐", "IT/테크놀로지 (AI, 코딩, 로봇 등)", "환경/지속가능성"],
@@ -63,8 +67,12 @@ COMM_STYLES = {
 @st.cache_data
 def load_mentor_data():
     """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다."""
+    # 멘토 데이터 파일 접근 (업로드된 파일 사용)
+    MENTOR_CSV_PATH = '멘토더미.csv' 
+    
     if os.path.exists(MENTOR_CSV_PATH):
         try:
+            # 멘토 CSV 파일을 로드합니다. (업로드된 파일 사용)
             df = pd.read_csv(MENTOR_CSV_PATH, encoding='utf-8')
             df.columns = df.columns.str.strip() 
             required_cols = ['name', 'age_band', 'occupation_major', 'topic_prefs', 'style', 'intro'] 
@@ -77,6 +85,7 @@ def load_mentor_data():
             return df
         except UnicodeDecodeError:
             try:
+                # 인코딩 오류 시 cp949로 재시도
                 df = pd.read_csv(MENTOR_CSV_PATH, encoding='cp949')
                 df.columns = df.columns.str.strip()
                 return df
@@ -94,7 +103,6 @@ def initialize_session_state():
     mentors_df = load_mentor_data()
     st.session_state.mentors_df = mentors_df
     
-    # --- 로그인 및 사용자 관리 관련 상태 ---
     if 'logged_in' not in st.session_state:
         st.session_state.logged_in = False
     if 'user_profile' not in st.session_state:
@@ -102,7 +110,6 @@ def initialize_session_state():
     if 'all_users' not in st.session_state:
         st.session_state.all_users = {}
     
-    # --- Q&A 누적 관련 상태 ---
     if 'daily_answers' not in st.session_state:
         initial_answers = [
             {"name": "진오", "age_band": "만 90세 이상", "answer": "너무 서두르지 말고, 꾸준함이 기적을 만든다는 것을 기억해라. 건강이 최고다."},
@@ -118,13 +125,14 @@ initialize_session_state()
 if st.session_state.mentors_df.empty and not st.session_state.logged_in:
     st.stop()
     
-# --- 3. 멘토 추천 로직 함수 (이전과 동일) ---
+# --- 3. 멘토 추천 로직 함수 (직종 필터링 로직은 기존과 동일하게 작동) ---
 
 def recommend_mentors(search_field, search_topic, search_style):
     mentors = st.session_state.mentors_df.copy()
     mentors['score'] = 0
     
     if search_field:
+        # CSV의 'occupation_major' 컬럼 값이 search_field와 일치하는지 확인
         mentors['score'] += mentors['occupation_major'].apply(lambda x: 3 if x == search_field else 0)
     
     if search_topic:
@@ -185,7 +193,9 @@ def show_registration_form():
             available_times = st.multiselect("소통 가능한 시간대", TIMES)
         
         st.subheader("현재 직종")
-        occupation_key = st.selectbox("현재 직종 분류", OCCUPATION_GROUPS)        
+        # 🌟 리스트로 변경된 OCCUPATION_GROUPS를 사용
+        occupation_key = st.selectbox("현재 직종 분류", OCCUPATION_GROUPS)
+        
         st.subheader("선호하는 대화 주제")
         selected_topics = st.multiselect(
             "멘토링에서 주로 어떤 주제에 대해 이야기하고 싶으신가요?", 
@@ -242,10 +252,12 @@ def show_mentor_search_and_connect():
         
         available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
         available_styles = sorted(list(COMM_STYLES.keys()))
-        available_fields_clean = sorted(OCCUPATION_GROUPS)        
+        # 🌟 리스트로 변경된 OCCUPATION_GROUPS를 사용
+        available_fields_clean = sorted(OCCUPATION_GROUPS)
+        
         with col_f:
             search_field = st.selectbox("💼 전문 분야 (직종 분류)", options=['(전체)'] + available_fields_clean)
-
+        
         with col_t:
             search_topic = st.selectbox("💬 주요 대화 주제", options=['(전체)'] + available_topics)
             
@@ -350,13 +362,13 @@ def show_daily_question():
 
 def main():
     # --- Streamlit 설정 ---
-    # Dark/Black 계열 배경을 위한 설정: Streamlit은 코드 내에서 배경색을 직접 지정하기 어렵습니다.
+    # Dark/Black 계열 배경을 위한 설정: 
     # .streamlit/config.toml 파일을 생성하여 아래 내용을 추가하면 Dark 모드와 파란색 계열의 배경이 적용됩니다.
     # [theme]
     # base="dark"
-    # primaryColor="#1E88E5"  # 파란색 계열의 버튼/링크 색상
-    # backgroundColor="#263238"  # 어두운 파란색 계열의 배경색 (선택 사항)
-    # secondaryBackgroundColor="#37474F" # 사이드바 배경색
+    # primaryColor="#1E88E5" 
+    # backgroundColor="#263238" 
+    # secondaryBackgroundColor="#37474F" 
     
     st.set_page_config(
         page_title="세대 간 멘토링 플랫폼",
@@ -389,13 +401,13 @@ def main():
         st.success(f"✅ **{mentor_name} 멘토**님과의 화상 채팅 연결이 새로운 탭에서 시작되었습니다.")
         st.markdown(f"**[Google Meet 연결 바로가기: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
         
-        # **수정 핵심:** 뒤로가기 버튼 추가
+        # 뒤로가기 버튼
         if st.button("⬅️ 다른 멘토 찾아보기"):
             st.session_state.connecting = False
             del st.session_state.connect_mentor_name
             st.rerun()
         
-        st.stop() # 연결 페이지에 머무르게 함 (뒤로가기 버튼 누르기 전까지)
+        st.stop() 
 
     # --- 메인 페이지 흐름 제어 ---
     st.sidebar.title("메뉴")
