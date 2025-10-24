@@ -6,7 +6,6 @@ import os
 
 # --- 1. 데이터 로드 및 상수 정의 ---
 
-# 🌟 중요: 만약 데이터 반영이 계속 안되면 이 파일명을 변경하여 재업로드해주세요.
 MENTOR_CSV_PATH = "멘토더미.csv" 
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
 GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy" 
@@ -37,7 +36,8 @@ OCCUPATION_GROUPS = [
     # 특수 상황군
     "학생",
     "전업주부",
-    "구직/이직 준비 또는 프리랜서", 
+    "구직/이직",
+    "프리랜서", 
     "기타"
 ]
 
@@ -64,8 +64,6 @@ COMM_STYLES = {
 # --- 2. 데이터 초기화 및 로드 ---
 
 def load_mentor_data():
-    """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다. (캐시 기능 제거)"""
-    
     if os.path.exists(MENTOR_CSV_PATH):
         try:
             df = pd.read_csv(MENTOR_CSV_PATH, encoding='utf-8')
@@ -130,7 +128,7 @@ def initialize_session_state():
             initial_answers.append({
                 "name": "광진", 
                 "age_band": gwang_jin_row.iloc[0]['age_band'], 
-                "answer": "돈보다 경험에 투자하고, 사랑하는 사람들에게 지금 당장 마음을 표현하렴. 후회는 순간이 아닌 나중에 온단다."
+                "answer": "돈보다 경험에 투자하고, 사랑하는 사람들에게 지금 당장 마음을 표현하렴.."
             })
             
         if not initial_answers:
@@ -318,10 +316,6 @@ def show_mentor_search_and_connect():
                 col_name, col_score = st.columns([3, 1])
                 with col_name:
                     st.markdown(f"#### 👤 {row['name']} ({row['age_band']})")
-                with col_score:
-                    if 'score' in row and row['score'] > 0:
-                        st.markdown(f"**🌟 추천 점수: {int(row['score'])}점**")
-                
                 col_m1, col_m2, col_m3 = st.columns(3)
                 with col_m1:
                     st.markdown(f"**전문 분야:** {row['occupation_major']}")
@@ -430,20 +424,6 @@ def main():
     # --- 메인 페이지 흐름 제어 ---
     st.sidebar.title("메뉴")
     
-    # --- DEBUGGING: SHOW CURRENTLY LOADED DATA SNIPPET ---
-    # 앱이 현재 어떤 데이터를 사용하고 있는지 표시합니다.
-    if st.session_state.mentors_df is not None and not st.session_state.mentors_df.empty:
-        st.sidebar.subheader("✨ 현재 로드된 데이터 (DEBUG)")
-        # 'style'을 포함하여 디버그 정보 출력 가정
-        cols_to_display = ['name', 'age_band', 'occupation_major', 'style']
-        st.sidebar.dataframe(
-            st.session_state.mentors_df[cols_to_display].head(3),
-            use_container_width=True,
-            hide_index=True
-        )
-        st.sidebar.caption(f"총 {len(st.session_state.mentors_df)}개 행 로드됨. 이 데이터가 반영되어야 합니다.")
-    # ---------------------------------------------------
-
     st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻")
 
     if not st.session_state.logged_in:
