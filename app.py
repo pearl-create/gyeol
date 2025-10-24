@@ -64,7 +64,6 @@ COMM_STYLES = {
 
 # --- 2. 데이터 초기화 및 로드 ---
 
-@st.cache_data
 def load_mentor_data():
     """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다."""
     # 멘토 데이터 파일 접근 (업로드된 파일 사용)
