@@ -6,8 +6,8 @@ import os
 
 # --- 1. 데이터 로드 및 상수 정의 ---
 
-# 멘토 데이터 파일 경로 (사용자 업로드 파일)
-MENTOR_CSV_PATH = "멘토더미_final.csv"
+# 🌟 중요: 만약 데이터 반영이 계속 안되면 이 파일명을 변경하여 재업로드해주세요.
+MENTOR_CSV_PATH = "멘토더미.csv" 
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
 GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy" 
 
@@ -66,7 +66,6 @@ COMM_STYLES = {
 # @st.cache_data 데코레이터가 제거된 상태 유지 -> 파일 강제 로드
 def load_mentor_data():
     """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다. (캐시 기능 제거)"""
-    MENTOR_CSV_PATH = '멘토더미.csv' 
     
     if os.path.exists(MENTOR_CSV_PATH):
         try:
@@ -110,8 +109,6 @@ def initialize_session_state():
     if 'daily_answers' not in st.session_state:
         initial_answers = []
         
-        # '진오'와 '광진' (CSV의 상단 멘토 이름)의 나이대를 CSV에서 가져와 동적으로 설정
-        # 멘토더미.csv 파일 내용에 따라 이름을 '진오'와 '광진'으로 지정함
         jin_oh_row = mentors_df[mentors_df['name'] == '진오']
         gwang_jin_row = mentors_df[mentors_df['name'] == '광진']
 
@@ -258,7 +255,6 @@ def show_mentor_search_and_connect():
     """멘토 검색 및 연결 기능을 표시합니다."""
     st.header("🔍 멘토 찾기 및 연결")
     
-    # st.session_state.mentors_df는 initialize_session_state에서 최신 CSV 데이터를 강제로 로드한 결과입니다.
     mentors = st.session_state.mentors_df
     
     # --- 검색 조건 입력 ---
@@ -302,12 +298,11 @@ def show_mentor_search_and_connect():
         if 'score' in st.session_state.recommendations.columns:
              st.caption("(추천 점수 또는 이름순)")
         
-        # 멘토 검색 결과를 출력할 때 CSV에서 로드된 age_band를 사용합니다.
         for index, row in st.session_state.recommendations.iterrows():
             with st.container(border=True):
                 col_name, col_score = st.columns([3, 1])
                 with col_name:
-                    # 이 부분이 CSV의 최신 나이(age_band)를 사용합니다.
+                    # CSV의 최신 나이(age_band)를 사용합니다.
                     st.markdown(f"#### 👤 {row['name']} ({row['age_band']})")
                 with col_score:
                     if 'score' in row and row['score'] > 0:
@@ -343,7 +338,7 @@ def show_daily_question():
     
     # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
     if st.session_state.daily_answers:
-        # 최신 답변이 위로 오도록 역순 정렬 (구문 오류 수정 완료)
+        # 구문 오류 수정 완료된 코드
         sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: 1, reverse=True) 
         
         for ans in sorted_answers:
@@ -371,12 +366,12 @@ def show_daily_question():
                 st.session_state.daily_answers.append(new_answer)
                 
                 st.success("답변이 제출되었습니다. 페이지를 새로고침하면(R 키) 누적된 답변을 볼 수 있습니다.")
-                st.rerun() # 답변 즉시 반영을 위해 새로고침
+                st.rerun() 
             else:
                 st.warning("답변 내용을 입력해 주세요.")
             
 
-# --- 5. 메인 앱 실행 함수 (이전과 동일) ---
+# --- 5. 메인 앱 실행 함수 (디버그 패널 추가) ---
 
 def main():
     st.set_page_config(
@@ -387,7 +382,7 @@ def main():
 
     if st.session_state.mentors_df.empty and not st.session_state.logged_in:
         st.title("👵👴 플랫폼 준비 중 🧑‍💻")
-        st.error("⚠️ 멘토 데이터를 로드하지 못했습니다. `멘토더미.csv` 파일을 확인해 주세요.")
+        st.error(f"⚠️ 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 로드하지 못했습니다. 파일을 확인해 주세요.")
         st.stop()
 
     # --- 연결 프로세스 처리 ---
@@ -419,6 +414,19 @@ def main():
 
     # --- 메인 페이지 흐름 제어 ---
     st.sidebar.title("메뉴")
+    
+    # --- DEBUGGING: SHOW CURRENTLY LOADED DATA SNIPPET ---
+    # 앱이 현재 어떤 데이터를 사용하고 있는지 표시합니다.
+    if st.session_state.mentors_df is not None and not st.session_state.mentors_df.empty:
+        st.sidebar.subheader("✨ 현재 로드된 데이터 (DEBUG)")
+        st.sidebar.dataframe(
+            st.session_state.mentors_df[['name', 'age_band', 'occupation_major']].head(3),
+            use_container_width=True,
+            hide_index=True
+        )
+        st.sidebar.caption(f"총 {len(st.session_state.mentors_df)}개 행 로드됨. 이 데이터가 반영되어야 합니다.")
+    # ---------------------------------------------------
+
     st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻")
 
     if not st.session_state.logged_in:
