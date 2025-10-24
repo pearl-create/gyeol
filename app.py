@@ -5,21 +5,6 @@ import time
 import os
 
 # --- 1. 데이터 로드 및 상수 정의 ---
-# 사이드바에 새로고침 버튼 추가 (main() 안, 사이드바 구성하는 부분 근처)
-if st.sidebar.button("🔄 데이터 새로고침"):
-    try:
-        # 캐시가 있다면 비우기 (지금은 cache_data 데코레이터가 없지만, 안전하게)
-        try:
-            st.cache_data.clear()
-        except Exception:
-            pass
-        # 파일 다시 읽어서 세션에 반영
-        st.session_state.mentors_df = load_mentor_data()
-        st.success("멘토 데이터가 새로고침되었습니다.")
-        st.rerun()
-    except Exception as e:
-        st.error(f"새로고침 중 오류: {e}")
-
 
 # 멘토 데이터 파일 경로 (사용자 업로드 파일)
 MENTOR_CSV_PATH = "멘토더미_with_occupation_major.csv"
@@ -455,7 +440,15 @@ def main():
         st.sidebar.divider()
         st.sidebar.markdown(f"**환영합니다, {st.session_state.user_profile.get('name')}님!**")
         st.sidebar.caption(f"나이대: {st.session_state.user_profile.get('age_band')}")
-        
+        # --- 사이드바 하단에 새로고침 버튼 추가 ---
+if st.sidebar.button("🔄 데이터 새로고침"):
+    try:
+        st.session_state.mentors_df = load_mentor_data()
+        st.success("멘토 데이터가 새로고침되었습니다.")
+        st.rerun()
+    except Exception as e:
+        st.error(f"새로고침 중 오류: {e}")
+
         if st.sidebar.button("🚪 로그아웃"):
             st.session_state.logged_in = False
             st.session_state.user_profile = {}
