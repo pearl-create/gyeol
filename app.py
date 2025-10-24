@@ -31,7 +31,12 @@ OCCUPATION_GROUPS = [
     "영업·판매·운전·운송직",
     "건설·채굴직",
     "설치·정비·생산직",
-    "농림어업직"
+    "농림어업직",
+    "학생", 
+    "전업주부", 
+    "구직/이직 준비",
+    "프리랜서", 
+    "기타"
 ]
 INTERESTS = {
     "여가/취미 관련": ["독서", "음악 감상", "영화/드라마 감상", "게임 (PC/콘솔/모바일)", "운동/스포츠 관람", "미술·전시 감상", "여행", "요리/베이킹", "사진/영상 제작", "춤/노래"],
@@ -180,8 +185,7 @@ def show_registration_form():
             available_times = st.multiselect("소통 가능한 시간대", TIMES)
         
         st.subheader("현재 직종")
-        occupation_key = st.selectbox("현재 직종 분류", list(OCCUPATION_GROUPS.keys()))
-        
+        occupation_key = st.selectbox("현재 직종 분류", OCCUPATION_GROUPS)        
         st.subheader("선호하는 대화 주제")
         selected_topics = st.multiselect(
             "멘토링에서 주로 어떤 주제에 대해 이야기하고 싶으신가요?", 
@@ -238,11 +242,10 @@ def show_mentor_search_and_connect():
         
         available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
         available_styles = sorted(list(COMM_STYLES.keys()))
-        available_fields_clean = sorted(list(OCCUPATION_GROUPS.keys()))
-        
+        available_fields_clean = sorted(OCCUPATION_GROUPS)        
         with col_f:
             search_field = st.selectbox("💼 전문 분야 (직종 분류)", options=['(전체)'] + available_fields_clean)
-        
+
         with col_t:
             search_topic = st.selectbox("💬 주요 대화 주제", options=['(전체)'] + available_topics)
             
