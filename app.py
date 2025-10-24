@@ -63,7 +63,7 @@ COMM_STYLES = {
 
 # --- 2. 데이터 초기화 및 로드 ---
 
-# @st.cache_data 데코레이터가 제거된 상태 유지
+# @st.cache_data 데코레이터가 제거된 상태 유지 -> 파일 강제 로드
 def load_mentor_data():
     """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다. (캐시 기능 제거)"""
     MENTOR_CSV_PATH = '멘토더미.csv' 
@@ -106,7 +106,7 @@ def initialize_session_state():
     if 'all_users' not in st.session_state:
         st.session_state.all_users = {}
     
-    # 🌟 수정된 부분: daily_answers를 CSV 데이터 기반으로 초기화
+    # 오늘의 질문 답변을 CSV 데이터 기반으로 초기화 (나이 최신화)
     if 'daily_answers' not in st.session_state:
         initial_answers = []
         
@@ -117,17 +117,16 @@ def initialize_session_state():
         if not jin_oh_row.empty:
              initial_answers.append({
                 "name": "진오", 
-                "age_band": jin_oh_row.iloc[0]['age_band'], # CSV의 최신 나이 사용
+                "age_band": jin_oh_row.iloc[0]['age_band'], 
                 "answer": "너무 서두르지 말고, 꾸준함이 기적을 만든다는 것을 기억해라. 건강이 최고다."
             })
         if not gwang_jin_row.empty:
             initial_answers.append({
                 "name": "광진", 
-                "age_band": gwang_jin_row.iloc[0]['age_band'], # CSV의 최신 나이 사용
+                "age_band": gwang_jin_row.iloc[0]['age_band'], 
                 "answer": "돈보다 경험에 투자하고, 사랑하는 사람들에게 지금 당장 마음을 표현하렴. 후회는 순간이 아닌 나중에 온단다."
             })
             
-        # 데이터가 비어있을 경우를 대비한 최소한의 안전 장치
         if not initial_answers:
              initial_answers = [
                 {"name": "샘플1", "age_band": "만 90세 이상", "answer": "데이터 로드 실패: 샘플 답변입니다."},
@@ -258,6 +257,7 @@ def show_mentor_search_and_connect():
     """멘토 검색 및 연결 기능을 표시합니다."""
     st.header("🔍 멘토 찾기 및 연결")
     
+    # st.session_state.mentors_df는 initialize_session_state에서 최신 CSV 데이터를 강제로 로드한 결과입니다.
     mentors = st.session_state.mentors_df
     
     # --- 검색 조건 입력 ---
@@ -301,10 +301,12 @@ def show_mentor_search_and_connect():
         if 'score' in st.session_state.recommendations.columns:
              st.caption("(추천 점수 또는 이름순)")
         
+        # 멘토 검색 결과를 출력할 때 CSV에서 로드된 age_band를 사용합니다.
         for index, row in st.session_state.recommendations.iterrows():
             with st.container(border=True):
                 col_name, col_score = st.columns([3, 1])
                 with col_name:
+                    # 이 부분이 CSV의 최신 나이(age_band)를 사용합니다.
                     st.markdown(f"#### 👤 {row['name']} ({row['age_band']})")
                 with col_score:
                     if 'score' in row and row['score'] > 0:
@@ -341,113 +343,4 @@ def show_daily_question():
     # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
     if st.session_state.daily_answers:
         # 최신 답변이 위로 오도록 역순 정렬
-        sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: 1, reverse=True) 
-        
-        for ans in sorted_answers:
-            with st.expander(f"[{ans['age_band']}] **{ans['name']}**님의 답변"):
-                st.write(ans['answer'])
-            
-    st.divider()
-    
-    # --- 답변 작성 폼 ---
-    st.subheader("나의 답변 작성하기")
-    current_name = st.session_state.user_profile.get('name', '익명')
-    current_age = st.session_state.user_profile.get('age_band', '미등록')
-    
-    with st.form("answer_form"):
-        answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
-        submitted = st.form_submit_button("답변 제출")
-        
-        if submitted:
-            if answer_text:
-                new_answer = {
-                    "name": current_name,
-                    "age_band": current_age,
-                    "answer": answer_text
-                }
-                st.session_state.daily_answers.append(new_answer)
-                
-                st.success("답변이 제출되었습니다. 페이지를 새로고침하면(R 키) 누적된 답변을 볼 수 있습니다.")
-                st.rerun() # 답변 즉시 반영을 위해 새로고침
-            else:
-                st.warning("답변 내용을 입력해 주세요.")
-            
-
-# --- 5. 메인 앱 실행 함수 (이전과 동일) ---
-
-def main():
-    st.set_page_config(
-        page_title="세대 간 멘토링 플랫폼",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-
-    if st.session_state.mentors_df.empty and not st.session_state.logged_in:
-        st.title("👵👴 플랫폼 준비 중 🧑‍💻")
-        st.error("⚠️ 멘토 데이터를 로드하지 못했습니다. `멘토더미.csv` 파일을 확인해 주세요.")
-        st.stop()
-
-    # --- 연결 프로세스 처리 ---
-    if st.session_state.get('connecting'):
-        mentor_name = st.session_state.connect_mentor_name
-        
-        st.info(f"🔗 **{mentor_name} 멘토**님과 화상 연결을 준비 중입니다. 잠시만 기다려주세요...")
-        time.sleep(2) 
-        st.balloons()
-        
-        st.markdown(
-            f"""
-            <script>
-                window.open('{GOOGLE_MEET_URL}', '_blank');
-            </script>
-            """, 
-            unsafe_allow_html=True
-        )
-        
-        st.success(f"✅ **{mentor_name} 멘토**님과의 화상 채팅 연결이 새로운 탭에서 시작되었습니다.")
-        st.markdown(f"**[Google Meet 연결 바로가기: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
-        
-        if st.button("⬅️ 다른 멘토 찾아보기"):
-            st.session_state.connecting = False
-            del st.session_state.connect_mentor_name
-            st.rerun()
-        
-        st.stop() 
-
-    # --- 메인 페이지 흐름 제어 ---
-    st.sidebar.title("메뉴")
-    st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻")
-
-    if not st.session_state.logged_in:
-        # 로그인/회원가입 선택
-        auth_option = st.radio("서비스 시작", ["로그인", "회원 가입"], index=0, horizontal=True)
-        if auth_option == "로그인":
-            show_login_form()
-        else:
-            show_registration_form()
-            
-    else:
-        # 로그인된 사용자용 메인 화면
-        page = st.sidebar.radio(
-            "페이지 이동",
-            ["멘토 찾기", "오늘의 질문"],
-            index=0
-        )
-        
-        st.sidebar.divider()
-        st.sidebar.markdown(f"**환영합니다, {st.session_state.user_profile.get('name')}님!**")
-        st.sidebar.caption(f"나이대: {st.session_state.user_profile.get('age_band')}")
-        
-        if st.sidebar.button("🚪 로그아웃"):
-            st.session_state.logged_in = False
-            st.session_state.user_profile = {}
-            st.info("로그아웃되었습니다.")
-            st.rerun()
-
-        if page == "멘토 찾기":
-            show_mentor_search_and_connect()
-        elif page == "오늘의 질문":
-            show_daily_question()
-
-if __name__ == "__main__":
-    main()
+        sorted_answers = sorted(st.session_state.daily_answers, key=lambda x:
