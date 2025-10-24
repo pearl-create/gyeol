@@ -397,4 +397,85 @@ def main():
 
     if st.session_state.mentors_df.empty and not st.session_state.logged_in:
         st.title("👵👴 플랫폼 준비 중 🧑‍💻")
-        st.error(f"⚠️
+        st.error(f"⚠️ 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 로드하지 못했습니다. 파일을 확인해 주세요.")
+        st.stop()
+
+    # --- 연결 프로세스 처리 ---
+    if st.session_state.get('connecting'):
+        mentor_name = st.session_state.connect_mentor_name
+        
+        st.info(f"🔗 **{mentor_name} 멘토**님과 화상 연결을 준비 중입니다. 잠시만 기다려주세요...")
+        time.sleep(2) 
+        st.balloons()
+        
+        st.markdown(
+            f"""
+            <script>
+                window.open('{GOOGLE_MEET_URL}', '_blank');
+            </script>
+            """, 
+            unsafe_allow_html=True
+        )
+        
+        st.success(f"✅ **{mentor_name} 멘토**님과의 화상 채팅 연결이 새로운 탭에서 시작되었습니다.")
+        st.markdown(f"**[Google Meet 연결 바로가기: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
+        
+        if st.button("⬅️ 다른 멘토 찾아보기"):
+            st.session_state.connecting = False
+            del st.session_state.connect_mentor_name
+            st.rerun()
+        
+        st.stop() 
+
+    # --- 메인 페이지 흐름 제어 ---
+    st.sidebar.title("메뉴")
+    
+    # --- DEBUGGING: SHOW CURRENTLY LOADED DATA SNIPPET ---
+    # 앱이 현재 어떤 데이터를 사용하고 있는지 표시합니다.
+    if st.session_state.mentors_df is not None and not st.session_state.mentors_df.empty:
+        st.sidebar.subheader("✨ 현재 로드된 데이터 (DEBUG)")
+        # 'style'을 포함하여 디버그 정보 출력 가정
+        cols_to_display = ['name', 'age_band', 'occupation_major', 'style']
+        st.sidebar.dataframe(
+            st.session_state.mentors_df[cols_to_display].head(3),
+            use_container_width=True,
+            hide_index=True
+        )
+        st.sidebar.caption(f"총 {len(st.session_state.mentors_df)}개 행 로드됨. 이 데이터가 반영되어야 합니다.")
+    # ---------------------------------------------------
+
+    st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻")
+
+    if not st.session_state.logged_in:
+        # 로그인/회원가입 선택
+        auth_option = st.radio("서비스 시작", ["로그인", "회원 가입"], index=0, horizontal=True)
+        if auth_option == "로그인":
+            show_login_form()
+        else:
+            show_registration_form()
+            
+    else:
+        # 로그인된 사용자용 메인 화면
+        page = st.sidebar.radio(
+            "페이지 이동",
+            ["멘토 찾기", "오늘의 질문"],
+            index=0
+        )
+        
+        st.sidebar.divider()
+        st.sidebar.markdown(f"**환영합니다, {st.session_state.user_profile.get('name')}님!**")
+        st.sidebar.caption(f"나이대: {st.session_state.user_profile.get('age_band')}")
+        
+        if st.sidebar.button("🚪 로그아웃"):
+            st.session_state.logged_in = False
+            st.session_state.user_profile = {}
+            st.info("로그아웃되었습니다.")
+            st.rerun()
+
+        if page == "멘토 찾기":
+            show_mentor_search_and_connect()
+        elif page == "오늘의 질문":
+            show_daily_question()
+
+if __name__ == "__main__":
+    main()
