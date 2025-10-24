@@ -4,14 +4,14 @@ import random
 import time
 import os
 
-# --- 1. 데이터 로드 및 상수 정의 (생략) ---
+# --- 1. 데이터 로드 및 상수 정의 ---
 
 # 멘토 데이터 파일 경로 (사용자 업로드 파일)
 MENTOR_CSV_PATH = "멘토더미.csv"
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
 GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy" 
 
-# --- 상수 및 옵션 정의 (이전과 동일) ---
+# --- 상수 및 옵션 정의 ---
 GENDERS = ["남", "여", "기타"]
 COMM_METHODS = ["대면 만남", "화상채팅", "일반 채팅"]
 WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
@@ -37,8 +37,7 @@ OCCUPATION_GROUPS = [
     # 특수 상황군
     "학생",
     "전업주부",
-    "구직/이직 준비",
-    "프리랜서",
+    "구직/이직 준비 또는 프리랜서", 
     "기타"
 ]
 
@@ -64,7 +63,7 @@ COMM_STYLES = {
 
 # --- 2. 데이터 초기화 및 로드 ---
 
-# 🌟 수정: @st.cache_data 데코레이터 제거!
+# @st.cache_data 데코레이터가 제거된 상태 유지
 def load_mentor_data():
     """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다. (캐시 기능 제거)"""
     MENTOR_CSV_PATH = '멘토더미.csv' 
@@ -107,11 +106,33 @@ def initialize_session_state():
     if 'all_users' not in st.session_state:
         st.session_state.all_users = {}
     
+    # 🌟 수정된 부분: daily_answers를 CSV 데이터 기반으로 초기화
     if 'daily_answers' not in st.session_state:
-        initial_answers = [
-            {"name": "진오", "age_band": "만 90세 이상", "answer": "너무 서두르지 말고, 꾸준함이 기적을 만든다는 것을 기억해라. 건강이 최고다."},
-            {"name": "다온", "age_band": "만 70세~79세", "answer": "돈보다 경험에 투자하고, 사랑하는 사람들에게 지금 당장 마음을 표현하렴. 후회는 순간이 아닌 나중에 온단다."},
-        ]
+        initial_answers = []
+        
+        # '진오'와 '광진' (CSV의 상단 멘토 이름)의 나이대를 CSV에서 가져와 동적으로 설정
+        jin_oh_row = mentors_df[mentors_df['name'] == '진오']
+        gwang_jin_row = mentors_df[mentors_df['name'] == '광진']
+
+        if not jin_oh_row.empty:
+             initial_answers.append({
+                "name": "진오", 
+                "age_band": jin_oh_row.iloc[0]['age_band'], # CSV의 최신 나이 사용
+                "answer": "너무 서두르지 말고, 꾸준함이 기적을 만든다는 것을 기억해라. 건강이 최고다."
+            })
+        if not gwang_jin_row.empty:
+            initial_answers.append({
+                "name": "광진", 
+                "age_band": gwang_jin_row.iloc[0]['age_band'], # CSV의 최신 나이 사용
+                "answer": "돈보다 경험에 투자하고, 사랑하는 사람들에게 지금 당장 마음을 표현하렴. 후회는 순간이 아닌 나중에 온단다."
+            })
+            
+        # 데이터가 비어있을 경우를 대비한 최소한의 안전 장치
+        if not initial_answers:
+             initial_answers = [
+                {"name": "샘플1", "age_band": "만 90세 이상", "answer": "데이터 로드 실패: 샘플 답변입니다."},
+            ]
+        
         st.session_state.daily_answers = initial_answers
         
     if 'recommendations' not in st.session_state:
@@ -355,7 +376,6 @@ def show_daily_question():
 # --- 5. 메인 앱 실행 함수 (이전과 동일) ---
 
 def main():
-    # --- Streamlit 설정 ---
     st.set_page_config(
         page_title="세대 간 멘토링 플랫폼",
         layout="wide",
