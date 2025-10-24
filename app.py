@@ -7,7 +7,7 @@ import os
 # --- 1. 데이터 로드 및 상수 정의 ---
 
 # 멘토 데이터 파일 경로 (사용자 업로드 파일)
-MENTOR_CSV_PATH = "멘토더미.csv"
+MENTOR_CSV_PATH = "멘토더미_final.csv"
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
 GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy" 
 
