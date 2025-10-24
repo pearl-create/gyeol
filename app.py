@@ -6,8 +6,8 @@ import os
 
 # --- 1. 데이터 로드 및 상수 정의 ---
 
-# 멘토 데이터 파일 경로 (사용자 업로드 파일)
-MENTOR_CSV_PATH = "멘토더미.csv"
+# 🌟 중요: 만약 데이터 반영이 계속 안되면 이 파일명을 변경하여 재업로드해주세요.
+MENTOR_CSV_PATH = "멘토더미.csv" 
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
 GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy" 
 
@@ -22,7 +22,7 @@ AGE_BANDS = [
     "만 70세~79세", "만 80세~89세", "만 90세 이상"
 ]
 
-# 🌟 직종 그룹: 대분류 리스트로 최종 변경 (CSV 파일의 occupation_major와 일치해야 함)
+# 직종 그룹: 대분류 리스트로 최종 변경
 OCCUPATION_GROUPS = [
     "경영·사무·금융·보험직",
     "연구직 및 공학기술직",
@@ -34,7 +34,7 @@ OCCUPATION_GROUPS = [
     "건설·채굴직",
     "설치·정비·생산직",
     "농림어업직",
-    # 특수 상황군 (CSV에 있는 값 기준)
+    # 특수 상황군
     "학생",
     "전업주부",
     "구직/이직 준비 또는 프리랜서", 
@@ -63,18 +63,20 @@ COMM_STYLES = {
 
 # --- 2. 데이터 초기화 및 로드 ---
 
-@st.cache_data
 def load_mentor_data():
-    """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다."""
-    # 멘토 데이터 파일 접근 (업로드된 파일 사용)
-    MENTOR_CSV_PATH = '멘토더미.csv' 
+    """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다. (캐시 기능 제거)"""
     
     if os.path.exists(MENTOR_CSV_PATH):
         try:
-            # 멘토 CSV 파일을 로드합니다. (업로드된 파일 사용)
             df = pd.read_csv(MENTOR_CSV_PATH, encoding='utf-8')
             df.columns = df.columns.str.strip() 
+            # 🌟 수정: 'style'을 필수 컬럼으로 가정
             required_cols = ['name', 'age_band', 'occupation_major', 'topic_prefs', 'style', 'intro'] 
+            
+            # 파일 컬럼 이름이 'communication_style'이면 'style'로 변경하여 호환성 확보
+            if 'communication_style' in df.columns and 'style' not in df.columns:
+                 df = df.rename(columns={'communication_style': 'style'})
+
             missing_cols = [col for col in required_cols if col not in df.columns]
 
             if missing_cols:
@@ -84,9 +86,11 @@ def load_mentor_data():
             return df
         except UnicodeDecodeError:
             try:
-                # 인코딩 오류 시 cp949로 재시도
                 df = pd.read_csv(MENTOR_CSV_PATH, encoding='cp949')
                 df.columns = df.columns.str.strip()
+                # 파일 컬럼 이름이 'communication_style'이면 'style'로 변경하여 호환성 확보
+                if 'communication_style' in df.columns and 'style' not in df.columns:
+                    df = df.rename(columns={'communication_style': 'style'})
                 return df
             except Exception as e:
                 st.error(f"CSV 파일 로드 중 심각한 오류 발생: {e}")
@@ -109,11 +113,31 @@ def initialize_session_state():
     if 'all_users' not in st.session_state:
         st.session_state.all_users = {}
     
+    # 오늘의 질문 답변을 CSV 데이터 기반으로 초기화 (나이 최신화)
     if 'daily_answers' not in st.session_state:
-        initial_answers = [
-            {"name": "진오", "age_band": "만 90세 이상", "answer": "너무 서두르지 말고, 꾸준함이 기적을 만든다는 것을 기억해라. 건강이 최고다."},
-            {"name": "다온", "age_band": "만 70세~79세", "answer": "돈보다 경험에 투자하고, 사랑하는 사람들에게 지금 당장 마음을 표현하렴. 후회는 순간이 아닌 나중에 온단다."},
-        ]
+        initial_answers = []
+        
+        jin_oh_row = mentors_df[mentors_df['name'] == '진오']
+        gwang_jin_row = mentors_df[mentors_df['name'] == '광진']
+
+        if not jin_oh_row.empty:
+             initial_answers.append({
+                "name": "진오", 
+                "age_band": jin_oh_row.iloc[0]['age_band'], 
+                "answer": "너무 서두르지 말고, 꾸준함이 기적을 만든다는 것을 기억해라. 건강이 최고다."
+            })
+        if not gwang_jin_row.empty:
+            initial_answers.append({
+                "name": "광진", 
+                "age_band": gwang_jin_row.iloc[0]['age_band'], 
+                "answer": "돈보다 경험에 투자하고, 사랑하는 사람들에게 지금 당장 마음을 표현하렴. 후회는 순간이 아닌 나중에 온단다."
+            })
+            
+        if not initial_answers:
+             initial_answers = [
+                {"name": "샘플1", "age_band": "만 90세 이상", "answer": "데이터 로드 실패: 샘플 답변입니다."},
+            ]
+        
         st.session_state.daily_answers = initial_answers
         
     if 'recommendations' not in st.session_state:
@@ -124,14 +148,13 @@ initialize_session_state()
 if st.session_state.mentors_df.empty and not st.session_state.logged_in:
     st.stop()
     
-# --- 3. 멘토 추천 로직 함수 (직종 필터링 로직은 기존과 동일하게 작동) ---
+# --- 3. 멘토 추천 로직 함수 ---
 
 def recommend_mentors(search_field, search_topic, search_style):
     mentors = st.session_state.mentors_df.copy()
     mentors['score'] = 0
     
     if search_field:
-        # CSV의 'occupation_major' 컬럼 값이 search_field와 일치하는지 확인
         mentors['score'] += mentors['occupation_major'].apply(lambda x: 3 if x == search_field else 0)
     
     if search_topic:
@@ -140,6 +163,7 @@ def recommend_mentors(search_field, search_topic, search_style):
         )
     
     if search_style:
+        # 🌟 수정: 'style' 컬럼 사용 가정
         mentors['score'] += mentors['style'].apply(lambda x: 1 if search_style in x else 0)
     
     if search_field or search_topic or search_style:
@@ -192,7 +216,6 @@ def show_registration_form():
             available_times = st.multiselect("소통 가능한 시간대", TIMES)
         
         st.subheader("현재 직종")
-        # 🌟 리스트로 변경된 OCCUPATION_GROUPS를 사용
         occupation_key = st.selectbox("현재 직종 분류", OCCUPATION_GROUPS)
         
         st.subheader("선호하는 대화 주제")
@@ -250,8 +273,13 @@ def show_mentor_search_and_connect():
         col_f, col_t, col_s = st.columns(3)
         
         available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
-        available_styles = sorted(list(COMM_STYLES.keys()))
-        # 🌟 리스트로 변경된 OCCUPATION_GROUPS를 사용
+        
+        # 'style' 컬럼을 사용하도록 가정하고, 해당 컬럼의 고유값을 스타일 옵션으로 사용
+        if 'style' in mentors.columns:
+            available_styles = sorted(list(mentors['style'].dropna().unique()))
+        else:
+             available_styles = sorted(list(COMM_STYLES.keys())) # fallback
+             
         available_fields_clean = sorted(OCCUPATION_GROUPS)
         
         with col_f:
@@ -300,6 +328,7 @@ def show_mentor_search_and_connect():
                 with col_m2:
                     st.markdown(f"**주요 주제:** {row['topic_prefs']}")
                 with col_m3:
+                    # 🌟 수정: 'style' 컬럼 값 출력 가정
                     st.markdown(f"**소통 스타일:** {row['style']}") 
                     
                 st.markdown(f"**멘토 한마디:** _{row['intro']}_")
@@ -324,7 +353,7 @@ def show_daily_question():
     
     # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
     if st.session_state.daily_answers:
-        # 최신 답변이 위로 오도록 역순 정렬
+        # 구문 오류 수정 완료된 코드
         sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: 1, reverse=True) 
         
         for ans in sorted_answers:
@@ -352,23 +381,14 @@ def show_daily_question():
                 st.session_state.daily_answers.append(new_answer)
                 
                 st.success("답변이 제출되었습니다. 페이지를 새로고침하면(R 키) 누적된 답변을 볼 수 있습니다.")
-                st.rerun() # 답변 즉시 반영을 위해 새로고침
+                st.rerun() 
             else:
                 st.warning("답변 내용을 입력해 주세요.")
             
 
-# --- 5. 메인 앱 실행 함수 ---
+# --- 5. 메인 앱 실행 함수 (디버그 패널 포함) ---
 
 def main():
-    # --- Streamlit 설정 ---
-    # Dark/Black 계열 배경을 위한 설정: 
-    # .streamlit/config.toml 파일을 생성하여 아래 내용을 추가하면 Dark 모드와 파란색 계열의 배경이 적용됩니다.
-    # [theme]
-    # base="dark"
-    # primaryColor="#1E88E5" 
-    # backgroundColor="#263238" 
-    # secondaryBackgroundColor="#37474F" 
-    
     st.set_page_config(
         page_title="세대 간 멘토링 플랫폼",
         layout="wide",
@@ -377,71 +397,4 @@ def main():
 
     if st.session_state.mentors_df.empty and not st.session_state.logged_in:
         st.title("👵👴 플랫폼 준비 중 🧑‍💻")
-        st.error("⚠️ 멘토 데이터를 로드하지 못했습니다. `멘토더미.csv` 파일을 확인해 주세요.")
-        st.stop()
-
-    # --- 연결 프로세스 처리 (연결 후 복귀 버튼 추가) ---
-    if st.session_state.get('connecting'):
-        mentor_name = st.session_state.connect_mentor_name
-        
-        st.info(f"🔗 **{mentor_name} 멘토**님과 화상 연결을 준비 중입니다. 잠시만 기다려주세요...")
-        time.sleep(2) 
-        st.balloons()
-        
-        st.markdown(
-            f"""
-            <script>
-                window.open('{GOOGLE_MEET_URL}', '_blank');
-            </script>
-            """, 
-            unsafe_allow_html=True
-        )
-        
-        st.success(f"✅ **{mentor_name} 멘토**님과의 화상 채팅 연결이 새로운 탭에서 시작되었습니다.")
-        st.markdown(f"**[Google Meet 연결 바로가기: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
-        
-        # 뒤로가기 버튼
-        if st.button("⬅️ 다른 멘토 찾아보기"):
-            st.session_state.connecting = False
-            del st.session_state.connect_mentor_name
-            st.rerun()
-        
-        st.stop() 
-
-    # --- 메인 페이지 흐름 제어 ---
-    st.sidebar.title("메뉴")
-    st.title("👵👴 세대 간 멘토링 플랫폼 🧑‍💻")
-
-    if not st.session_state.logged_in:
-        # 로그인/회원가입 선택
-        auth_option = st.radio("서비스 시작", ["로그인", "회원 가입"], index=0, horizontal=True)
-        if auth_option == "로그인":
-            show_login_form()
-        else:
-            show_registration_form()
-            
-    else:
-        # 로그인된 사용자용 메인 화면
-        page = st.sidebar.radio(
-            "페이지 이동",
-            ["멘토 찾기", "오늘의 질문"],
-            index=0
-        )
-        
-        st.sidebar.divider()
-        st.sidebar.markdown(f"**환영합니다, {st.session_state.user_profile.get('name')}님!**")
-        st.sidebar.caption(f"나이대: {st.session_state.user_profile.get('age_band')}")
-        
-        if st.sidebar.button("🚪 로그아웃"):
-            st.session_state.logged_in = False
-            st.session_state.user_profile = {}
-            st.info("로그아웃되었습니다.")
-            st.rerun()
-
-        if page == "멘토 찾기":
-            show_mentor_search_and_connect()
-        elif page == "오늘의 질문":
-            show_daily_question()
-
-if __name__ == "__main__":
-    main()
+        st.error(f"⚠️
