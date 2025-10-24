@@ -4,14 +4,14 @@ import random
 import time
 import os
 
-# --- 1. 데이터 로드 및 상수 정의 ---
+# --- 1. 데이터 로드 및 상수 정의 (생략) ---
 
 # 멘토 데이터 파일 경로 (사용자 업로드 파일)
 MENTOR_CSV_PATH = "멘토더미.csv"
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
 GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy" 
 
-# --- 상수 및 옵션 정의 ---
+# --- 상수 및 옵션 정의 (이전과 동일) ---
 GENDERS = ["남", "여", "기타"]
 COMM_METHODS = ["대면 만남", "화상채팅", "일반 채팅"]
 WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
@@ -22,7 +22,7 @@ AGE_BANDS = [
     "만 70세~79세", "만 80세~89세", "만 90세 이상"
 ]
 
-# 🌟 직종 그룹: 대분류 리스트로 최종 변경 (CSV 파일의 occupation_major와 일치해야 함)
+# 직종 그룹: 대분류 리스트로 최종 변경
 OCCUPATION_GROUPS = [
     "경영·사무·금융·보험직",
     "연구직 및 공학기술직",
@@ -34,11 +34,11 @@ OCCUPATION_GROUPS = [
     "건설·채굴직",
     "설치·정비·생산직",
     "농림어업직",
-    # 특수 상황군 (CSV에 있는 값 기준)
+    # 특수 상황군
     "학생",
     "전업주부",
     "구직/이직 준비",
-    "프리랜서", 
+    "프리랜서",
     "기타"
 ]
 
@@ -64,14 +64,13 @@ COMM_STYLES = {
 
 # --- 2. 데이터 초기화 및 로드 ---
 
+# 🌟 수정: @st.cache_data 데코레이터 제거!
 def load_mentor_data():
-    """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다."""
-    # 멘토 데이터 파일 접근 (업로드된 파일 사용)
+    """CSV 파일에서 멘토 데이터를 로드하고 컬럼명을 정리합니다. (캐시 기능 제거)"""
     MENTOR_CSV_PATH = '멘토더미.csv' 
     
     if os.path.exists(MENTOR_CSV_PATH):
         try:
-            # 멘토 CSV 파일을 로드합니다. (업로드된 파일 사용)
             df = pd.read_csv(MENTOR_CSV_PATH, encoding='utf-8')
             df.columns = df.columns.str.strip() 
             required_cols = ['name', 'age_band', 'occupation_major', 'topic_prefs', 'style', 'intro'] 
@@ -84,7 +83,6 @@ def load_mentor_data():
             return df
         except UnicodeDecodeError:
             try:
-                # 인코딩 오류 시 cp949로 재시도
                 df = pd.read_csv(MENTOR_CSV_PATH, encoding='cp949')
                 df.columns = df.columns.str.strip()
                 return df
@@ -124,14 +122,13 @@ initialize_session_state()
 if st.session_state.mentors_df.empty and not st.session_state.logged_in:
     st.stop()
     
-# --- 3. 멘토 추천 로직 함수 (직종 필터링 로직은 기존과 동일하게 작동) ---
+# --- 3. 멘토 추천 로직 함수 (이전과 동일) ---
 
 def recommend_mentors(search_field, search_topic, search_style):
     mentors = st.session_state.mentors_df.copy()
     mentors['score'] = 0
     
     if search_field:
-        # CSV의 'occupation_major' 컬럼 값이 search_field와 일치하는지 확인
         mentors['score'] += mentors['occupation_major'].apply(lambda x: 3 if x == search_field else 0)
     
     if search_topic:
@@ -150,7 +147,7 @@ def recommend_mentors(search_field, search_topic, search_style):
     return recommended_mentors.reset_index(drop=True)
 
 
-# --- 4. 인증/회원가입/UI 함수 정의 ---
+# --- 4. 인증/회원가입/UI 함수 정의 (이전과 동일) ---
 
 def show_login_form():
     """로그인 폼을 표시합니다."""
@@ -192,7 +189,6 @@ def show_registration_form():
             available_times = st.multiselect("소통 가능한 시간대", TIMES)
         
         st.subheader("현재 직종")
-        # 🌟 리스트로 변경된 OCCUPATION_GROUPS를 사용
         occupation_key = st.selectbox("현재 직종 분류", OCCUPATION_GROUPS)
         
         st.subheader("선호하는 대화 주제")
@@ -251,7 +247,6 @@ def show_mentor_search_and_connect():
         
         available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
         available_styles = sorted(list(COMM_STYLES.keys()))
-        # 🌟 리스트로 변경된 OCCUPATION_GROUPS를 사용
         available_fields_clean = sorted(OCCUPATION_GROUPS)
         
         with col_f:
@@ -357,18 +352,10 @@ def show_daily_question():
                 st.warning("답변 내용을 입력해 주세요.")
             
 
-# --- 5. 메인 앱 실행 함수 ---
+# --- 5. 메인 앱 실행 함수 (이전과 동일) ---
 
 def main():
     # --- Streamlit 설정 ---
-    # Dark/Black 계열 배경을 위한 설정: 
-    # .streamlit/config.toml 파일을 생성하여 아래 내용을 추가하면 Dark 모드와 파란색 계열의 배경이 적용됩니다.
-    # [theme]
-    # base="dark"
-    # primaryColor="#1E88E5" 
-    # backgroundColor="#263238" 
-    # secondaryBackgroundColor="#37474F" 
-    
     st.set_page_config(
         page_title="세대 간 멘토링 플랫폼",
         layout="wide",
@@ -380,7 +367,7 @@ def main():
         st.error("⚠️ 멘토 데이터를 로드하지 못했습니다. `멘토더미.csv` 파일을 확인해 주세요.")
         st.stop()
 
-    # --- 연결 프로세스 처리 (연결 후 복귀 버튼 추가) ---
+    # --- 연결 프로세스 처리 ---
     if st.session_state.get('connecting'):
         mentor_name = st.session_state.connect_mentor_name
         
@@ -400,7 +387,6 @@ def main():
         st.success(f"✅ **{mentor_name} 멘토**님과의 화상 채팅 연결이 새로운 탭에서 시작되었습니다.")
         st.markdown(f"**[Google Meet 연결 바로가기: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
         
-        # 뒤로가기 버튼
         if st.button("⬅️ 다른 멘토 찾아보기"):
             st.session_state.connecting = False
             del st.session_state.connect_mentor_name
