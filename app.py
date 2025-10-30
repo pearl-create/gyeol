@@ -153,15 +153,15 @@ def initialize_session_state():
 
         if not jin_oh_row.empty:
             initial_answers.append({
-                "name": "진오",
+                "name": "윤슬조",
                 "age_band": jin_oh_row.iloc[0]['age_band'],
-                "answer": "너무 서두르지 말고, 꾸준함이 기적을 만든다는 것을 기억해라. 건강이 최고다."
+                "answer": "초1로 돌아가서 피아노 학원 가고 싶음. 과일 카드 다 색칠하면 주는 떡볶이 먹고 싶음."
             })
         if not gwang_jin_row.empty:
             initial_answers.append({
-                "name": "광진",
+                "name": "다효니",
                 "age_band": gwang_jin_row.iloc[0]['age_band'],
-                "answer": "돈보다 경험에 투자하고, 사랑하는 사람들에게 지금 당장 마음을 표현하렴.."
+                "answer": "어떤 말을 해야 적절할까 어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까"
             })
 
         if not initial_answers:
@@ -272,7 +272,7 @@ def show_registration_form():
             if not name or not available_days or not available_times or not selected_topics or not selected_style:
                 st.error("이름, 소통 가능 요일/시간, 주제, 소통 스타일은 필수 입력 항목입니다.")
             elif name in st.session_state.all_users:
-                st.error(f"'{name}' 이름은 이미 등록되어 있습니다. 다른 이름을 사용하거나 로그인해 주세요.")
+                st.error(f"'{name}' 이미 등록된 이름입니다.")
             else:
                 user_profile_data = {
                     "name": name,
@@ -380,7 +380,7 @@ def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
 
-    daily_q = "🤔 **'나와 전혀 다른 세대의 삶을 하루만 살아볼 수 있다면 언제로 가고 싶은지 이유와 함께 알려주세요!'**"
+    daily_q = "🤔 **'나와 전혀 다른 세대의 삶을 하루만 살아볼 수 있다면, 어떤 세대의 삶을 살아보고 싶은지 이유와 함께 알려주세요!'**"
     st.subheader(daily_q)
 
     # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
