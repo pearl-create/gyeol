@@ -7,7 +7,7 @@ import json # 🌟 추가: JSON 파일 저장을 위해 import
 
 # --- 1. 데이터 로드 및 상수 정의 ---
 
-MENTOR_CSV_PATH = "멘토더미.csv" 
+MENTOR_CSV_PATH = "멘토더미.csv"
 USERS_FILE_PATH = "users.json" # 🌟 추가: 사용자 계정 정보를 저장할 파일 경로
 ANSWERS_FILE_PATH = "daily_answers.json" # 🌟 추가: 오늘의 질문 답변을 저장할 파일 경로
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
