@@ -5,8 +5,9 @@ scikit-learn>=1.4
 streamlit-image-select==0.6.0
 
 # --- 추가 패키지 ---
+streamlit==1.38.0
+numpy
+soundfile
+tensorflow
 streamlit-webrtc==0.47.1
 av==11.0.0
-soundfile
-tflite-runtime
-numpy
