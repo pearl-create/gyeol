@@ -145,29 +145,11 @@ def initialize_session_state():
     if daily_answers_from_file is not None:
         st.session_state.daily_answers = daily_answers_from_file
     else:
-        # 초기 답변 생성 로직 (파일이 없을 경우)
+        # 초기 답변 생성 로직 (파일이 없을 경우): 완전히 빈 리스트로 초기화하여 샘플 답변을 제거합니다.
         initial_answers = []
 
-        jin_oh_row = mentors_df[mentors_df['name'] == '진오']
-        gwang_jin_row = mentors_df[mentors_df['name'] == '광진']
-
-        if not jin_oh_row.empty:
-            initial_answers.append({
-                "name": "윤슬조",
-                "age_band": jin_oh_row.iloc[0]['age_band'],
-                "answer": "초1로 돌아가서 피아노 학원 가고 싶음. 과일 카드 다 색칠하면 주는 떡볶이 먹고 싶음."
-            })
-        if not gwang_jin_row.empty:
-            initial_answers.append({
-                "name": "다효니",
-                "age_band": gwang_jin_row.iloc[0]['age_band'],
-                "answer": "어떤 말을 해야 적절할까 어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까어떤 말을 해야 적절할까"
-            })
-
-        if not initial_answers:
-            initial_answers = [
-                {"name": "샘플1", "age_band": "만 90세 이상", "answer": "데이터 로드 실패: 샘플 답변입니다."},
-            ]
+        # 기존의 샘플 답변 생성 로직(윤슬조, 다효니 답변)은 삭제되었습니다.
+        # 데이터 로드 실패 시의 최소 샘플 답변("샘플1")도 제거하여 깨끗한 상태로 시작합니다.
 
         st.session_state.daily_answers = initial_answers
         # 초기 답변이 생성되면 파일에 저장 (최초 1회)
@@ -376,7 +358,6 @@ def show_mentor_search_and_connect():
 
 
 def show_daily_question():
-    """오늘의 질문 게시판을 표시하고, 답변을 누적하여 보여줍니다."""
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
 
