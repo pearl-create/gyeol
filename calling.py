@@ -2,7 +2,10 @@ import streamlit as st
 import numpy as np
 import io
 import time
-from tflite_runtime.interpreter import Interpreter
+# *********** 수정된 부분 ***********
+# from tflite_runtime.interpreter import Interpreter (이전)
+from tensorflow.lite.interpreter import Interpreter 
+# ***********************************
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase
 
 # --- 1. 설정 및 모델 로드 ---
@@ -36,7 +39,7 @@ def load_teachable_machine_model():
     except Exception as e:
         st.error(f"모델 또는 라벨 파일 로드 오류: {e}")
         st.error(f"오류 상세: {e}")
-        st.warning("TFLite 모델 실행 환경(tflite_runtime)이 올바르게 설정되었는지 확인하세요.")
+        st.warning("TFLite 모델을 로드하는 데 실패했습니다. TensorFlow 라이브러리 설치를 확인하세요.")
         return None, None, None, None
 
 INTERPRETER, LABELS, INPUT_DETAILS, OUTPUT_DETAILS = load_teachable_machine_model()
@@ -54,14 +57,12 @@ class TFLiteAudioProcessor(AudioProcessorBase):
         self.labels = labels
         self.audio_buffer = np.array([], dtype=np.float32)
         
-        # Streamlit UI 업데이트를 위한 세션 상태
         st.session_state.current_result = "스트림 시작 대기 중..."
         st.session_state.detection_history = []
 
     def recv(self, frame):
         """WebRTC 오디오 프레임이 들어올 때마다 호출됩니다."""
         # 1. 오디오 데이터 추출 및 float32로 변환
-        # frame.to_ndarray()는 int16 형식의 오디오 배열을 반환합니다.
         audio_int16 = np.frombuffer(frame.to_ndarray(), dtype=np.int16)
         audio_float32 = audio_int16.astype(np.float32) / 32768.0
 
@@ -71,13 +72,9 @@ class TFLiteAudioProcessor(AudioProcessorBase):
         # 2. 1초(44100 샘플) 분량의 데이터가 모였는지 확인
         if self.audio_buffer.size >= AUDIO_CHUNK_SIZE:
             
-            # 모델에 입력할 1초 데이터 추출
             input_data = self.audio_buffer[:AUDIO_CHUNK_SIZE]
-            
-            # 버퍼에서 사용된 데이터 제거 (나머지 데이터는 다음 프레임과 합쳐짐)
             self.audio_buffer = self.audio_buffer[AUDIO_CHUNK_SIZE:]
             
-            # 티처블 머신 TFLite 모델은 (1, 44100) 형태의 입력을 기대합니다.
             input_tensor = input_data.reshape(1, AUDIO_CHUNK_SIZE)
 
             # 3. 모델 예측 실행
@@ -90,8 +87,9 @@ class TFLiteAudioProcessor(AudioProcessorBase):
             confidence = predictions[predicted_class_index]
             predicted_label = self.labels[predicted_class_index]
             
-            # 5. 비속어 감지 및 기록 (라벨 이름에 따라 조건 수정)
-            is_profanity = any(word in predicted_label for word in ["아이씨", "욕설_라벨", "비속어_라벨"]) # labels.txt 기반으로 수정
+            # 5. 비속어 감지 및 기록
+            # 사용자가 제공한 labels.txt ('3 아이씨')를 기반으로 감지
+            is_profanity = any(word in predicted_label for word in ["아이씨"])
             
             if is_profanity and confidence > 0.7:
                 detection_result = f"🚨 비속어 감지됨! ({predicted_label}: {confidence*100:.1f}%)"
@@ -101,12 +99,10 @@ class TFLiteAudioProcessor(AudioProcessorBase):
             # 6. Streamlit UI 업데이트 (세션 상태 사용)
             st.session_state.current_result = detection_result
             
-            # 이력 업데이트
             history = st.session_state.get('detection_history', [])
             history.append(detection_result)
-            st.session_state.detection_history = history[-5:] # 최신 5개만 유지
+            st.session_state.detection_history = history[-5:]
 
-        # 오디오 프레임은 그대로 반환
         return frame
 
 # --- 3. Streamlit UI 구성 ---
@@ -119,22 +115,18 @@ if INTERPRETER is None:
 else:
     st.info("🎤 아래 버튼을 클릭하고 마이크 접근을 허용하면 실시간 음성 감지가 시작됩니다.")
 
-    # webrtc_streamer 설정 및 실행
     webrtc_ctx = webrtc_streamer(
         key="audio-detector",
         mode=WebRtcMode.SENDONLY,
-        # AudioProcessorBase 클래스의 인스턴스를 생성하여 오디오 처리에 사용
         audio_processor_factory=lambda: TFLiteAudioProcessor(
             INTERPRETER, INPUT_DETAILS, OUTPUT_DETAILS, LABELS
         ),
-        # 실시간 오디오 스트림만 필요하므로 비디오는 비활성화
         media_stream_constraints={"video": False, "audio": True}, 
     )
 
     # --- 4. 실시간 결과 표시 ---
     st.subheader("실시간 감지 결과")
     
-    # UI는 매번 리런되므로 세션 상태의 최신 결과를 가져와 표시합니다.
     current_result = st.session_state.get('current_result', '스트림 시작 대기 중...')
     
     if "🚨 비속어" in current_result:
