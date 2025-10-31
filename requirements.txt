@@ -9,5 +9,3 @@ streamlit==1.38.0
 numpy
 soundfile
 tensorflow
-streamlit-webrtc==0.47.1
-av==11.0.0
