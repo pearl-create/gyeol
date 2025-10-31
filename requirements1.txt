@@ -1,0 +1,6 @@
+streamlit==1.38.0
+streamlit-webrtc==0.47.1
+numpy
+soundfile
+tflite-runtime
+av
