@@ -4,9 +4,16 @@ pandas>=2.2
 numpy>=1.26
 scikit-learn>=1.4
 
-# 이미지 선택용
-streamlit-image-select==0.6.0
+# 실시간 오디오/영상 스트림용
+streamlit-webrtc
+# (설치 안 될 경우 Cloud 제한 때문일 수 있음)
 
-# 오디오 분류용
-soundfile
-tensorflow
+# TFLite 모델 실행용
+# tflite-runtime이 설치 실패하면 아래 주석 해제하고 tensorflow 사용
+tflite-runtime
+# tensorflow
+
+# 오디오 전처리용
+# 필요 시 아래 주석 해제
+# librosa
+# scipy
