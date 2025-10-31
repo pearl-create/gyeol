@@ -1,3 +1,17 @@
+# calling.py
+
+# 0. av가 없으면 설치하려고 시도
+try:
+    import av
+except ModuleNotFoundError:
+    import os, sys, subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "av==11.0.0"])
+    import av  # 다시 import
+
+import streamlit as st
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase
+# ... 이하 기존 코드 ...
+
 import streamlit as st
 import numpy as np
 import av
