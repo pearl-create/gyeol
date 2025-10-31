@@ -3,7 +3,7 @@ from pathlib import Path
 import streamlit as st
 
 MENTOR_URL = "https://appapppy-qcagtlkwzwevbmcmwc56rw.streamlit.app/"
-MENTEE_URL = "https://37mokmtxhvt8uxwgdamw7y.streamlit.app/"
+MENTEE_URL = "https://jzrtrhjwcltrxshayj8vrv.streamlit.app/"
 
 st.set_page_config(page_title="결(結) — Home", page_icon="✨", layout="centered")
 
