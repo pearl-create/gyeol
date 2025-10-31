@@ -231,7 +231,7 @@ def show_login_form():
 
 def show_registration_form():
     """회원 가입 폼을 표시합니다."""
-    st.header("👤 회원 가입 (멘티/멘토 등록)")
+    st.header("👤 회원 가입")
 
     with st.form("registration_form"):
         st.subheader("기본 정보")
