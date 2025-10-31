@@ -1,12 +1,12 @@
-streamlit>=1.37
+# 기본 패키지
+streamlit==1.38.0
 pandas>=2.2
 numpy>=1.26
 scikit-learn>=1.4
+
+# 이미지 선택용
 streamlit-image-select==0.6.0
 
-streamlit==1.38.0
-numpy
+# 오디오 분류용
 soundfile
 tensorflow
-streamlit-webrtc==0.47.1
-av==11.0.0
