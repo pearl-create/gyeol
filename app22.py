@@ -3,7 +3,7 @@ import pandas as pd
 import random
 import time
 import os
-import json # JSON 파일 저장을 위해 import
+import json 
 
 # --- 1. 데이터 로드 및 상수 정의 ---
 
@@ -20,7 +20,8 @@ WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
 TIMES = ["오전", "오후", "저녁"]
 AGE_BANDS = [
     "만 13세~19세", "만 20세~29세", "만 30세~39세",
-    "만 40세~49세", "만 50세~59세", "만 60세~69세",
+    "만 40세~49세", "만 50세~59세", # 50-59세 수정
+    "만 60세~69세",
     "만 70세~79세", "만 80세~89세", "만 90세 이상"
 ]
 
@@ -131,7 +132,7 @@ def initialize_session_state():
     mentors_df = load_mentor_data()
     st.session_state.mentors_df = mentors_df
 
-    # 🌟 수정: 영구 저장된 사용자 데이터를 로드
+    # 영구 저장된 사용자 데이터를 로드
     st.session_state.all_users = load_json_data(USERS_FILE_PATH, {})
 
     if 'logged_in' not in st.session_state:
@@ -139,17 +140,26 @@ def initialize_session_state():
     if 'user_profile' not in st.session_state:
         st.session_state.user_profile = {}
 
-    # 🌟 수정: 영구 저장된 답변 데이터를 로드하거나, 없으면 초기 답변을 생성
+    # 영구 저장된 답변 데이터를 로드하거나, 없으면 초기 답변을 생성
     daily_answers_from_file = load_json_data(ANSWERS_FILE_PATH, None)
 
     if daily_answers_from_file is not None:
         st.session_state.daily_answers = daily_answers_from_file
     else:
-        # 초기 답변 생성 로직 (파일이 없을 경우): 완전히 빈 리스트로 초기화합니다.
+        # 초기 답변 생성 로직 (파일이 없을 경우)
         initial_answers = []
         st.session_state.daily_answers = initial_answers
         # 초기 답변이 생성되면 파일에 저장 (최초 1회)
         save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+        
+    # 수정/삭제 기능 관련 상태 초기화. -1은 수정 중인 답변이 없음을 의미합니다.
+    if 'editing_index' not in st.session_state:
+        st.session_state.editing_index = -1
+        
+    # 삭제 확인 상태 (답변 인덱스)
+    if 'confirming_delete_index' not in st.session_state:
+        st.session_state.confirming_delete_index = -1 
+
 
     if 'recommendations' not in st.session_state:
         st.session_state.recommendations = pd.DataFrame()
@@ -175,7 +185,7 @@ def recommend_mentors(search_field, search_topic, search_style):
 
     if search_style:
         # 'style' 컬럼 사용 가정
-        mentors['score'] += mentors['style'].apply(lambda x: 1 if search_style in x else 0)
+        mentors['score'] += mentors['style'].apply(lambda x: 1 if x == search_style else 0)
 
     if search_field or search_topic or search_style:
         recommended_mentors = mentors[mentors['score'] > 0].sort_values(by='score', ascending=False)
@@ -268,7 +278,7 @@ def show_registration_form():
                 st.session_state.user_profile = user_profile_data
                 st.session_state.logged_in = True
 
-                # 🌟 수정: 사용자 데이터 영구 저장
+                # 사용자 데이터 영구 저장
                 save_json_data(st.session_state.all_users, USERS_FILE_PATH)
 
                 st.success(f"🎉 {name}님, 성공적으로 가입 및 로그인되었습니다!")
@@ -357,90 +367,289 @@ def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
 
+    # 1. CSS 스타일 수정: 답변 박스 내 버튼 스타일링 추가 및 숨겨진 버튼 처리
+    st.markdown(f"""
+        <style>
+        /* 앱 전체 배경 강렬한 마젠타-퍼플 그라데이션 */
+        .stApp {{
+            background: linear-gradient(135deg, #FF69B4 0%, #8A2BE2 100%); /* Hot Pink to Blue Violet */
+            background-attachment: fixed;
+        }}
+
+        /* 메인 콘텐츠 영역 (헤더, 일반 텍스트) 흰색 유지 */
+        h1, h2, h3, h4, h5, h6, .stMarkdown, .stSubheader, label {{
+            color: #FFFFFF !important;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+        }}
+        div[data-testid="stText"] {{
+             color: #EEEEEE !important;
+        }}
+        
+        /* 1. 사이드바 텍스트 색상 흰색으로 복원 */
+        div[data-testid="stSidebarContent"] * {{
+            color: #FFFFFF !important; /* 모든 사이드바 콘텐츠를 흰색으로 */
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }}
+        /* 라디오 버튼의 텍스트 색상도 흰색으로 복원 및 추가 강제 적용 */
+        div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label,
+        div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label span,
+        div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label div,
+        div[data-testid="stSidebarContent"] .stMarkdown > p {{
+             color: #FFFFFF !important;
+             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }}
+        /* 로그인/회원가입 라디오 버튼의 텍스트도 흰색으로 복원 */
+        div[data-testid="stSidebarContent"] div[data-testid="stHorizontalBlock"] label,
+        div[data-testid="stSidebarContent"] div[data-testid="stHorizontalBlock"] label span,
+        div[data-testid="stSidebarContent"] div[data-testid="stHorizontalBlock"] label div {{
+             color: #FFFFFF !important;
+             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }}
+
+        /* 로그아웃 버튼 텍스트가 흰색으로 보이도록 추가 보장 */
+        .stButton button span {{
+             color: #FFFFFF !important;
+             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }}
+
+
+        /* 2. 말풍선 컨테이너 (st.container) 스타일링 */
+        .bubble-container {{
+            position: relative; 
+            background: #ffffff; 
+            border-radius: 1.5em; 
+            padding: 25px 20px 20px 20px; /* 패딩 유지 */
+            min-height: 150px; 
+            margin: 8px 0 5px 0; 
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
+            transition: all 0.2s ease-in-out;
+            border: 1px solid rgba(255, 255, 255, 0.8); 
+        }}
+        
+        /* 2-1. 답변 정보 (나이대/이름) 스타일링 */
+        .bubble-info {{
+            font-size: 0.95em;
+            font-weight: bold;
+            color: #8A2BE2; /* 보라색 계열로 눈에 띄게 */
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f0f0f0; /* 정보와 답변 사이 구분선 */
+            margin-bottom: 10px;
+        }}
+        
+        /* 3. 답변 텍스트 스타일 개선 */
+        .bubble-answer {{
+            font-size: 1.1em;
+            line-height: 1.6;
+            color: #333333;
+            margin-top: 5px; 
+            font-weight: 500;
+            padding-right: 20px; 
+            padding-bottom: 40px; /* 하단 버튼 공간 확보 */
+        }}
+        
+        /* 4. 폼 배경색을 흰색으로 설정하여 가독성 높임 */
+        div[data-testid="stForm"] {{
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }}
+        div[data-testid="stForm"] label {{
+            color: #333333 !important; 
+            text-shadow: none;
+        }}
+
+        /* 5. 수정/삭제 버튼 스타일링 및 위치 지정 (우측 하단) */
+        
+        /* 실제 Streamlit 버튼(disabled 상태 포함)을 화면에서 완전히 숨깁니다. */
+        div[data-testid^="stColumn"] > div > div > button[kind="secondary"],
+        div[data-testid^="stColumn"] > div > div > button[kind="secondary"][disabled] {{
+             display: none !important;
+        }}
+
+        /* HTML 마크다운으로 삽입된 버튼 컨테이너 스타일링 및 위치 */
+        .action-button-wrapper {{
+            position: absolute;
+            bottom: 10px; /* 답변 박스 하단에 배치 */
+            right: 15px; /* 답변 박스 우측에 배치 */
+            display: flex;
+            gap: 10px; /* 버튼 간 간격 */
+            z-index: 10; /* 다른 요소 위에 표시 */
+        }}
+        
+        .action-button-wrapper button {{
+            /* 기본 버튼 스타일 */
+            border-radius: 9999px; /* 완전히 둥근 버튼 */
+            font-size: 0.9em;
+            padding: 5px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-shadow: none; /* 버튼 내부 텍스트 그림자 제거 */
+        }}
+        
+        /* 수정 버튼 스타일 */
+        .edit-button {{
+            background-color: #8A2BE2; /* 보라색 계열 */
+            color: #FFFFFF !important; 
+            border: 1px solid #8A2BE2;
+        }}
+        .edit-button:hover {{
+            background-color: #6A1B9A; /* 짙은 보라색 */
+            transform: translateY(-1px);
+        }}
+        
+        /* 삭제 버튼 스타일 */
+        .delete-button {{
+            background-color: #FFFFFF; /* 흰색 배경 */
+            color: #FF69B4 !important; /* 핫핑크 텍스트 */
+            border: 1px solid #FF69B4;
+        }}
+        .delete-button:hover {{
+            background-color: #FF69B4;
+            color: #FFFFFF !important;
+            transform: translateY(-1px);
+        }}
+
+        
+        </style>
+    """, unsafe_allow_html=True)
+
+
     daily_q = "🤔 **'나와 전혀 다른 세대의 삶을 하루만 살아볼 수 있다면, 어떤 세대의 삶을 살아보고 싶은지 이유와 함께 알려주세요!'**"
     st.subheader(daily_q)
 
-    current_name = st.session_state.user_profile.get('name', '익명')
-    
     # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
     if st.session_state.daily_answers:
-        st.subheader("📝 다른 사람들의 답변")
-        # 답변 순서는 이름순으로 정렬
-        sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: x['name'], reverse=False)
-
-        for index, ans in enumerate(sorted_answers):
-            is_mine = ans['name'] == current_name
-            
-            # 1. 둥근 사각형 박스 안에 답변 표시
-            with st.container(border=True):
-                st.markdown(f"**👤 {ans['name']}** ([{ans['age_band']}])")
-                st.markdown(ans['answer'], unsafe_allow_html=True) # 답변 내용
-
-                if is_mine:
-                    # 2. 로그인한 사람의 답변에 수정/삭제 폼 추가
-                    st.divider()
-                    st.markdown("##### ✏️ 나의 답변 수정/삭제")
-                    
-                    # 수정을 위한 폼
-                    with st.form(f"edit_answer_form_{index}"):
-                        new_answer_text = st.text_area("답변 수정", value=ans['answer'], max_chars=500, height=100, key=f"edit_text_{index}")
-                        col_edit, col_delete = st.columns([1, 1])
-                        
-                        with col_edit:
-                            edit_submitted = st.form_submit_button("✅ 수정 완료")
-                        with col_delete:
-                            # 삭제는 버튼 하나만 누르면 바로 처리되도록 별도의 폼이 아닌 버튼으로 구성
-                            # Streamlit 폼 내부의 Submit 버튼 외에는 버튼 클릭 시 폼 제출 없이 바로 처리되도록 로직 구성
-                            pass # 삭제 버튼은 폼 외부에서 처리
-
-                    # 수정 로직
-                    if edit_submitted:
-                        st.session_state.daily_answers[st.session_state.daily_answers.index(ans)]['answer'] = new_answer_text
-                        save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
-                        st.success("답변이 성공적으로 **수정**되었습니다!")
-                        st.rerun()
-
-                    # 삭제 로직 (폼 바깥에 버튼 배치)
-                    if st.button("❌ 답변 삭제", key=f"delete_btn_{index}"):
-                        st.session_state.daily_answers.pop(st.session_state.daily_answers.index(ans))
-                        save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
-                        st.success("답변이 성공적으로 **삭제**되었습니다!")
-                        st.rerun()
+        sorted_answers = st.session_state.daily_answers 
+        current_name = st.session_state.user_profile.get('name')
+        
+        # Streamlit의 컬럼 구조를 사용하여 답변을 3개씩 나열합니다.
+        cols = st.columns(3)
+        
+        for i, ans in enumerate(sorted_answers):
+            # 답변 하나당 하나의 컬럼 컨테이너에 들어갑니다.
+            with cols[i % 3]: 
+                # ------------------- 📌 중요: 소유자 체크 --------------------
+                is_owner = (ans['name'] == current_name)
                 
+                # ---------------------- 수정/삭제/일반 표시 모드 ----------------------
+                if st.session_state.editing_index == i:
+                    # 수정 모드일 때는 일반 말풍선 대신 수정 폼을 표시합니다.
+                    with st.form(f"edit_form_{i}", clear_on_submit=False):
+                        st.markdown(f"**답변 수정 [{ans['age_band']}] {ans['name']}**", unsafe_allow_html=True)
+                        edited_text = st.text_area("수정 내용", ans['answer'], height=100, key=f"edit_text_{i}")
+                        col_save, col_cancel = st.columns(2)
+                        
+                        with col_save:
+                            if st.form_submit_button("저장", type="primary", use_container_width=True):
+                                if edited_text:
+                                    st.session_state.daily_answers[i]['answer'] = edited_text
+                                    st.session_state.editing_index = -1
+                                    st.session_state.confirming_delete_index = -1 
+                                    save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                                    st.success("✅ 답변이 성공적으로 수정되었습니다!")
+                                    st.rerun()
+                                else:
+                                    st.error("수정할 내용을 입력해 주세요.")
+                        with col_cancel:
+                            if st.form_submit_button("취소", use_container_width=True):
+                                st.session_state.editing_index = -1
+                                st.session_state.confirming_delete_index = -1
+                                st.rerun()
+                
+                elif st.session_state.confirming_delete_index == i:
+                    # 삭제 확인 메시지 표시
+                    st.warning(f"정말로 답변을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.", icon="⚠️")
+                    col_confirm, col_cancel = st.columns(2)
+                    with col_confirm:
+                        if st.button("✅ 예, 삭제합니다.", key=f"confirm_delete_{i}", use_container_width=True):
+                            del st.session_state.daily_answers[i]
+                            save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                            st.toast("🗑️ 답변이 삭제되었습니다.")
+                            st.session_state.editing_index = -1 
+                            st.session_state.confirming_delete_index = -1 # 삭제 상태 해제
+                            st.rerun()
+                    with col_cancel:
+                        if st.button("❌ 취소", key=f"cancel_delete_{i}", use_container_width=True):
+                            st.session_state.confirming_delete_index = -1 # 삭제 상태 해제
+                            st.rerun()
+                
+                else:
+                    # 답변 텍스트 버블 표시
+                    answer_display_html = f"""
+                        <div class='bubble-container'>
+                            <div class='bubble-info'>
+                                [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
+                            </div>
+                            <p class='bubble-answer'>
+                                {ans['answer']}
+                            </p>
+                            
+                            {
+                                # ---------------------- 수정/삭제 버튼 (소유자에게만) ----------------------
+                                '''
+                                <div class="action-button-wrapper">
+                                    <button class="edit-button" 
+                                        onclick="document.querySelector('button[key=edit_btn_{i}]').click()">
+                                        수정 ✏️
+                                    </button>
+                                    <button class="delete-button" 
+                                        onclick="document.querySelector('button[key=delete_btn_{i}]').click()">
+                                        삭제 🗑️
+                                    </button>
+                                </div>
+                                ''' if is_owner else ''
+                            }
+                        </div>
+                        """
+                    # st.markdown()을 사용하여 HTML 코드를 렌더링
+                    st.markdown(answer_display_html, unsafe_allow_html=True)
+                    
+                    # ---------------------- 실제 Streamlit 버튼 (숨겨짐) ----------------------
+                    if is_owner:
+                        # 클릭 시 수정 모드로 전환
+                        # type="secondary" 속성을 이용하여 기본 Streamlit 버튼을 숨기고 HTML 버튼으로 클릭 이벤트를 트리거합니다.
+                        if st.button("✏️", key=f"edit_btn_{i}", help="답변 수정", use_container_width=False, type="secondary"):
+                            st.session_state.editing_index = i
+                            st.session_state.confirming_delete_index = -1 
+                            st.rerun()
+                        # 클릭 시 삭제 확인 모드로 전환
+                        if st.button("🗑️", key=f"delete_btn_{i}", help="답변 삭제", use_container_width=False, type="secondary"):
+                            st.session_state.editing_index = -1
+                            st.session_state.confirming_delete_index = i
+                            st.rerun()
+
+
     st.divider()
 
-    # --- 답변 작성 폼 (답변이 이미 있다면 수정 폼만 표시) ---
-    
-    # 현재 로그인한 사용자의 답변이 이미 있는지 확인
-    user_has_answered = any(ans['name'] == current_name for ans in st.session_state.daily_answers)
-    
-    if user_has_answered:
-        st.info("이미 답변을 작성하셨습니다. 답변 수정은 위에서 해주세요.")
-    else:
-        st.subheader("나의 답변 작성하기")
-        current_age = st.session_state.user_profile.get('age_band', '미등록')
+    # --- 답변 작성 폼 ---
+    st.subheader("나의 답변 작성")
+    current_name = st.session_state.user_profile.get('name', '익명')
+    current_age = st.session_state.user_profile.get('age_band', '미등록')
 
-        with st.form("answer_form"):
-            answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
-            submitted = st.form_submit_button("답변 제출")
+    with st.form("answer_form"):
+        # "질문에 대한 당신의 생각을 적어주세요." 텍스트 삭제, placeholder로 대체
+        answer_text = st.text_area("", max_chars=500, height=150, placeholder="여기에 당신의 생각을 자유롭게 적어주세요...")
+        submitted = st.form_submit_button("답변 제출", type="primary")
 
-            if submitted:
-                if answer_text:
-                    new_answer = {
-                        "name": current_name,
-                        "age_band": current_age,
-                        "answer": answer_text
-                    }
-                    st.session_state.daily_answers.append(new_answer)
+        if submitted:
+            if answer_text:
+                new_answer = {
+                    "name": current_name,
+                    "age_band": current_age,
+                    "answer": answer_text
+                }
+                st.session_state.daily_answers.append(new_answer)
 
-                    # 🌟 수정: 답변 데이터 영구 저장
-                    save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                # 답변 데이터 영구 저장
+                save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
 
-                    # 3. 새로고침 후 재로그인 없이 새 답변이 보이도록 re-run
-                    st.success("답변이 제출되었습니다. 바로 위에서 답변을 확인하실 수 있습니다.")
-                    st.rerun()
-                else:
-                    st.warning("답변 내용을 입력해 주세요.")
+                st.success("✅ 답변이 성공적으로 제출되었습니다! 이제 목록에서 바로 확인하실 수 있습니다.")
+                st.rerun() 
+            else:
+                st.warning("답변 내용을 입력해 주세요.")
 
 
 # --- 5. 메인 앱 실행 함수 (디버그 패널 포함) ---
@@ -491,7 +700,7 @@ def main():
 
     if not st.session_state.logged_in:
         # 로그인/회원가입 선택
-        auth_option = st.radio("서비스 시작", ["로그인", "회원 가입"], index=0, horizontal=True)
+        auth_option = st.sidebar.radio("서비스 시작", ["로그인", "회원 가입"], index=0, horizontal=True)
         if auth_option == "로그인":
             show_login_form()
         else:
