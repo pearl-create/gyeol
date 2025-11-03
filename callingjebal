@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>화상 통화형 실시간 비속어 감지 데모</title>
+  <!-- p5.js (영상 데모용, 있어도 되고 없어도 됨) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.9.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.9.0/addons/p5.dom.min.js"></script>
+  <!-- ✅ ml5 1.3.0 -->
+  <script src="https://unpkg.com/ml5@1.3.0/dist/ml5.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #0f172a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #fff;
+    }
+    .app { display: flex; height: 100vh; }
+    .left {
+      flex: 1.1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .right {
+      flex: 0.9;
+      padding: 16px 20px;
+      background: rgba(2, 6, 23, 0.6);
+      border-left: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+    }
+    .call-window {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 14px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .top-dots { display: flex; gap: 8px; align-items: center; }
+    .dot { width: 10px; height: 10px; border-radius: 999px; }
+    .dot.red { background: #f43f5e; }
+    .dot.yellow { background: #f97316; }
+    .dot.green { background: #22c55e; }
+
+    .videos { display: flex; gap: 10px; flex: 1; min-height: 0; }
+    video { background: #000; }
+    #localVideo {
+      width: 58%;
+      border-radius: 14px;
+      object-fit: cover;
+      aspect-ratio: 4/3;
+    }
+    .side-panel { width: 42%; display: flex; flex-direction: column; gap: 10px; }
+    #remoteVideo {
+      width: 100%;
+      border-radius: 14px;
+      object-fit: cover;
+      aspect-ratio: 4/3;
+    }
+    .text-box {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size: 0.75rem;
+      line-height: 1.4;
+      opacity: 0.75;
+    }
+    .call-buttons { display: flex; gap: 10px; justify-content: center; }
+    .call-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 7px 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .call-btn.light { background: #e2e8f0; color: #0f172a; }
+    .call-btn.mic { background: #0f766e; color: #fff; }
+    .call-btn.end { background: #f43f5e; color: #fff; }
+
+    .status-box {
+      background: rgba(15, 23, 42, 0.35);
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }
+    .label-big { font-size: 2rem; font-weight: 700; word-break: keep-all; }
+    .safe {
+      background: rgba(15, 118, 110, 0.25);
+      border: 1px solid rgba(45, 212, 191, 0.3);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-weight: 600;
+    }
+    .danger {
+      background: rgba(248, 113, 113, 0.22);
+      border: 1px solid rgba(248, 113, 113, 0.4);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-weight: 700;
+      animation: blink 0.6s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%   { box-shadow: 0 0 0 rgba(248,113,113,0.5); }
+      50%  { box-shadow: 0 0 18px rgba(248,113,113,0.8); }
+      100% { box-shadow: 0 0 0 rgba(248,113,113,0.5); }
+    }
+
+    .bars { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+    .bar-row { display: flex; flex-direction: column; gap: 3px; }
+    .bar-label-line { display: flex; justify-content: space-between; font-size: 0.72rem; opacity: 0.7; }
+    .bar-track {
+      width: 100%;
+      height: 10px;
+      background: rgba(15, 23, 42, 0.35);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #38bdf8, #6366f1);
+      border-radius: 999px;
+      transition: width 0.25s ease-out;
+    }
+    .bar-fill.danger {
+      background: linear-gradient(90deg, #f43f5e, #fb7185);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- LEFT -->
+    <div class="left">
+      <div class="call-window">
+        <div class="top-dots">
+          <div class="dot red"></div>
+          <div class="dot yellow"></div>
+          <div class="dot green"></div>
+          <div style="margin-left:6px; font-weight:600; font-size:0.9rem;">멘토-멘티 화상상담</div>
+          <div id="audioStatus" style="margin-left:auto; font-size:0.7rem; opacity:0.6;">마이크: 대기</div>
+        </div>
+        <div class="videos">
+          <video id="localVideo" autoplay playsinline muted></video>
+          <div class="side-panel">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <div class="text-box">
+              대화 중 비속어는 자동으로 감지됩니다.<br />
+              (이 화면은 데모용이며, 상대 영상은 샘플입니다.)
+            </div>
+          </div>
+        </div>
+        <div class="call-buttons">
+          <button class="call-btn light" id="camBtn">카메라 켜기</button>
+          <button class="call-btn mic" id="micBtn">🎙 말하기 시작</button>
+          <button class="call-btn end" id="endBtn">통화 종료</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="right">
+      <h2 style="margin-top:4px;">🎤 실시간 욕설 감지</h2>
+      <p style="opacity:0.7; margin-top:-6px;">“깔라만씨 / 수박씨 / 아이씨” 중 하나가 <b>80% 이상</b>이면 빨간 경고가 뜹니다.</p>
+
+      <div class="status-box">
+        <div style="font-size:0.75rem; opacity:0.7;">현재 1순위 라벨</div>
+        <div id="currentLabel" class="label-big">listening...</div>
+      </div>
+
+      <div id="alertBox" class="safe" style="margin-top:12px;">
+        ✅ 안전한 발화입니다.
+      </div>
+
+      <div class="status-box" style="margin-top:12px;">
+        <div style="font-size:0.8rem; opacity:0.75; margin-bottom:6px;">클래스별 신뢰도</div>
+        <div class="bars">
+          <div class="bar-row">
+            <div class="bar-label-line">
+              <span id="bar-1-name">-</span>
+              <span id="bar-1-val">0%</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" id="bar-1-fill"></div></div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label-line">
+              <span id="bar-2-name">-</span>
+              <span id="bar-2-val">0%</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" id="bar-2-fill"></div></div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label-line">
+              <span id="bar-3-name">-</span>
+              <span id="bar-3-val">0%</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" id="bar-3-fill"></div></div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label-line">
+              <span id="bar-4-name">-</span>
+              <span id="bar-4-val">0%</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" id="bar-4-fill"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // === 설정 ===
+    const MODEL_URL = "https://teachablemachine.withgoogle.com/models/gSHOySjax/";
+    const BAD_LABELS = ["깔라만씨", "수박씨", "아이씨"];
+    const THRESHOLD = 80;
+
+    let classifier = null;
+
+    window.addEventListener("DOMContentLoaded", () => {
+      const camBtn = document.getElementById("camBtn");
+      const micBtn = document.getElementById("micBtn");
+      const endBtn = document.getElementById("endBtn");
+      const localVideo = document.getElementById("localVideo");
+      const audioStatus = document.getElementById("audioStatus");
+
+      // 카메라
+      camBtn.onclick = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          localVideo.srcObject = stream;
+        } catch (err) {
+          console.error(err);
+          alert("카메라를 켤 수 없습니다: " + err.message);
+        }
+      };
+
+      // 마이크 + 모델
+      micBtn.onclick = async () => {
+        micBtn.textContent = "🎙 말하는 중...";
+        micBtn.style.background = "#f97316";
+        try {
+          await navigator.mediaDevices.getUserMedia({ audio: true });
+          audioStatus.textContent = "마이크: 켜짐 (수신 중)";
+          initClassifier();  // 🔴 이때 모델 로드
+        } catch (err) {
+          console.error(err);
+          audioStatus.textContent = "마이크: 권한 거부됨";
+          alert("마이크 권한을 허용해 주세요!");
+        }
+      };
+
+      endBtn.onclick = () => {
+        micBtn.textContent = "🎙 말하기 시작";
+        micBtn.style.background = "#0f766e";
+        audioStatus.textContent = "마이크: 대기";
+        if (classifier && typeof classifier.classifyStop === "function") {
+          classifier.classifyStop();
+        }
+      };
+    });
+
+    // === ml5 불러오기 ===
+    function initClassifier() {
+      const options = { probabilityThreshold: 0.0 };
+      // 🔴 이 버전에서는 리턴값에 분류기가 담기고, 콜백은 "준비"만 알려준다고 보면 된다
+      classifier = ml5.soundClassifier(MODEL_URL + "model.json", options, modelReady);
+    }
+
+    async function modelReady() {
+      console.log("✅ 모델 로드 콜백 호출됨");
+      // 일부 버전은 ready라는 Promise를 갖고 있음
+      if (classifier && classifier.ready && typeof classifier.ready.then === "function") {
+        await classifier.ready;
+      }
+      startClassification();
+    }
+
+    function startClassification() {
+      if (!classifier) {
+        console.error("❌ classifier가 없습니다.");
+        return;
+      }
+
+      // 1) 일반적인 ml5 스타일
+      if (typeof classifier.classify === "function") {
+        console.log("▶ classifier.classify(...) 사용");
+        classifier.classify(gotResult);
+      }
+      // 2) 네가 처음 콘솔에서 본 스타일 (classifyStart만 있는 경우)
+      else if (typeof classifier.classifyStart === "function") {
+        console.log("▶ classifier.classifyStart(...) 사용");
+        classifier.classifyStart(gotResult);
+      }
+      // 3) 둘 다 없으면 구조 찍기
+      else {
+        console.error("❌ 이 classifier에는 classify/ classifyStart가 없습니다. 구조를 확인하세요:", classifier);
+      }
+    }
+
+    function gotResult(error, results) {
+      if (error) {
+        console.error(error);
+        return;
+      }
+      if (!results || results.length === 0) return;
+
+      console.log("🎯 결과:", results);
+      updateUI(results);
+    }
+
+    function updateUI(results) {
+      const labelEl = document.getElementById("currentLabel");
+      const alertBox = document.getElementById("alertBox");
+      const audioStatus = document.getElementById("audioStatus");
+
+      const best = results[0];
+      const bestLabel = best.label;
+      const bestConf = (best.confidence * 100).toFixed(1);
+
+      labelEl.textContent = `${bestLabel} (${bestConf}%)`;
+      audioStatus.textContent = "마이크: 수신 중";
+
+      const barIds = [
+        { name: "bar-1-name", val: "bar-1-val", fill: "bar-1-fill" },
+        { name: "bar-2-name", val: "bar-2-val", fill: "bar-2-fill" },
+        { name: "bar-3-name", val: "bar-3-val", fill: "bar-3-fill" },
+        { name: "bar-4-name", val: "bar-4-val", fill: "bar-4-fill" },
+      ];
+
+      results.slice(0, 4).forEach((r, i) => {
+        const pct = (r.confidence * 100).toFixed(1);
+        const nameEl = document.getElementById(barIds[i].name);
+        const valEl = document.getElementById(barIds[i].val);
+        const fillEl = document.getElementById(barIds[i].fill);
+
+        nameEl.textContent = r.label;
+        valEl.textContent = pct + "%";
+        fillEl.style.width = pct + "%";
+
+        if (BAD_LABELS.includes(r.label) && parseFloat(pct) >= THRESHOLD) {
+          fillEl.classList.add("danger");
+        } else {
+          fillEl.classList.remove("danger");
+        }
+      });
+
+      // 결과가 4개보다 적으면 나머지 0으로
+      if (results.length < 4) {
+        for (let i = results.length; i < 4; i++) {
+          const nameEl = document.getElementById(barIds[i].name);
+          const valEl = document.getElementById(barIds[i].val);
+          const fillEl = document.getElementById(barIds[i].fill);
+          nameEl.textContent = "-";
+          valEl.textContent = "0%";
+          fillEl.style.width = "0%";
+          fillEl.classList.remove("danger");
+        }
+      }
+
+      // 경고
+      if (BAD_LABELS.includes(bestLabel) && parseFloat(bestConf) >= THRESHOLD) {
+        alertBox.className = "danger";
+        alertBox.textContent = `🚨 ${bestLabel} 감지됨 (${bestConf}%) - 경고 전송!`;
+      } else {
+        alertBox.className = "safe";
+        alertBox.textContent = "✅ 안전한 발화입니다.";
+      }
+    }
+  </script>
+</body>
+</html>
