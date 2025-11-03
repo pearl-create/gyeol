@@ -385,11 +385,11 @@ def show_daily_question():
 
         /* 2. 말풍선 컨테이너 (st.container) 스타일링 */
         .bubble-container {{
-            position: relative;
-            background: #ffffff; /* 모든 말풍선 흰색 */
-            border-radius: 1.5em; /* 둥근 사각형 */
+            position: relative; /* 🌟 중요: 이 요소를 absolute 위치의 기준점으로 설정 */
+            background: #ffffff; 
+            border-radius: 1.5em; 
             padding: 20px;
-            padding-top: 40px; /* 이름 정보 및 메뉴 공간 확보를 위해 위쪽 패딩 증가 */
+            padding-top: 40px; 
             margin: 20px 0 5px 0; 
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
             transition: all 0.2s ease-in-out;
@@ -397,8 +397,8 @@ def show_daily_question():
         }}
         
         .bubble-container:hover {{
-            transform: none; /* 움직임 제거 */
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25); /* 그림자 유지 */
+            transform: none; 
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25); 
         }}
         
         /* 3. 답변 텍스트 스타일 */
@@ -413,10 +413,10 @@ def show_daily_question():
         .bubble-info {{
             font-size: 1em; 
             font-weight: bold; 
-            color: #9400D3; /* 진한 퍼플 계열로 강조 */
+            color: #9400D3; 
             padding-bottom: 8px;
             margin-bottom: 12px;
-            position: absolute; /* 절대 위치 지정 */
+            position: absolute; 
             top: 15px;
             left: 20px;
         }}
@@ -433,49 +433,40 @@ def show_daily_question():
             text-shadow: none;
         }}
         
-        /* 6. 수정/삭제 메뉴 버튼 (st.expander) 스타일 개선 */
+        /* 6. 수정/삭제 메뉴 버튼 (st.expander) 스타일 개선 - 강제 가시성 확보 */
         
-        /* Expander 컨테이너 위치: 답변 박스 안 우측 상단 */
-        div[data-testid^="stVerticalBlock"] > div > div[data-testid^="stExpander"] {{
+        /* Expander 버튼 (⋮ 아이콘) 스타일: 가시성 확보 및 흰색 배경 위 검은색 텍스트 강제 */
+        div[data-testid^="stExpander"] > div[role="button"] {{
+            padding: 0 8px;
+            background-color: transparent !important;
+            color: #000000 !important; /* 점 색상을 확실히 검은색으로 강제 */
+            font-size: 1.8em; /* 폰트 사이즈 키워서 가시성 높이기 */
+            cursor: pointer;
+            z-index: 20;
+            line-height: 1; 
+            font-weight: bold;
+            height: 30px; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+
+        /* Expander 컨테이너 위치: 답변 박스 안 우측 상단 (bubble-container의 relative를 기준으로 동작) */
+        /* st.expander가 생성하는 최상위 div가 column 내의 다른 div에 의해 래핑되는 문제를 극복하기 위한 선택자 */
+        div[data-testid^="stVerticalBlock"] div[data-testid^="stExpander"] {{
             position: absolute; 
-            top: 10px; 
+            top: 5px; /* 조금 더 위로 */
             right: 15px; 
             width: auto; 
             z-index: 100; 
             margin: 0 !important;
         }}
 
-        /* Expander 버튼 (⋮ 아이콘) 스타일: 가시성 확보 */
-        div[data-testid^="stExpander"] > div[role="button"] {{
-            padding: 5px; 
-            background-color: transparent !important;
-            color: #000000 !important; /* 점 색상을 확실히 검은색으로 */
-            font-size: 1.8em; /* 폰트 사이즈 키워서 가시성 높이기 */
-            cursor: pointer;
-            z-index: 20;
-            line-height: 0.5; /* 수직 점이 잘 보이도록 줄 간격 조정 */
-        }}
-
-        /* Expander 컨텐츠 (Edit/Delete 버튼) 스타일 조정 */
-        div[data-testid^="stExpander"] .stExpanderDetails {{
-            position: absolute; 
-            right: 0px; 
-            top: 35px; 
-            background-color: #ffffff; 
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            padding: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            width: 120px; 
-            z-index: 30;
-            color: #333333 !important; /* 드롭다운 메뉴의 기본 텍스트 색상을 어둡게 */
-        }}
-
         /* 드롭다운 메뉴 내부 버튼의 글자 색상 (수정, 삭제 텍스트) 강제 지정 */
         div[data-testid^="stExpander"] .stExpanderDetails button p,
         div[data-testid^="stExpander"] .stExpanderDetails button span,
         div[data-testid^="stExpander"] .stExpanderDetails button div {{
-            color: #333333 !important; /* 버튼 내부의 모든 텍스트 요소를 어둡게 */
+            color: #333333 !important; /* 버튼 내부의 모든 텍스트 요소를 어둡게 강제 */
         }}
         
         </style>
@@ -525,23 +516,13 @@ def show_daily_question():
                 # ---------------------- 일반 표시 모드 --------------------------
                 else:
                     # 마크다운을 사용하여 말풍선 및 내용 표시
-                    st.markdown(
-                        f"""
-                        <div class='bubble-container'>
-                            <p class='bubble-info'>
-                                [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
-                            </p>
-                            <p class='bubble-answer'>
-                                {ans['answer']}
-                            </p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                    # 메뉴 버튼이 말풍선 위에 위치하도록, 메뉴 버튼을 먼저 렌더링하고,
+                    # 마크다운에 position: relative가 적용된 후, 메뉴 버튼을 absolute로 배치합니다.
                     
                     # 소유자에게만 수정/삭제 메뉴 표시 (점 세 개 역할)
                     if is_owner:
                         # Streamlit Expander를 점 세 개 메뉴처럼 사용하여 옵션 제공
+                        # 이 Expander는 다음 마크다운과 같은 레벨에 위치하며, CSS로 마크다운 위에 겹쳐집니다.
                         with st.expander("⋮", expanded=False): 
                             col_e, col_d = st.columns(2)
                             
@@ -568,6 +549,21 @@ def show_daily_question():
                                             # 아무 동작도 하지 않거나, 메시지를 지우고 싶다면 다시 렌더링
                                             st.session_state.editing_index = -1 # 수정 모드 해제
                                             st.rerun()
+
+                    # 마크다운은 HTML/CSS의 .bubble-container를 통해 전체 배경을 제공합니다.
+                    st.markdown(
+                        f"""
+                        <div class='bubble-container'>
+                            <p class='bubble-info'>
+                                [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
+                            </p>
+                            <p class='bubble-answer'>
+                                {ans['answer']}
+                            </p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
 
     st.divider()
