@@ -3,7 +3,7 @@ import pandas as pd
 import random
 import time
 import os
-import json # JSON 파일 저장을 위해 import
+import json 
 
 # --- 1. 데이터 로드 및 상수 정의 ---
 
@@ -150,6 +150,10 @@ def initialize_session_state():
         st.session_state.daily_answers = initial_answers
         # 초기 답변이 생성되면 파일에 저장 (최초 1회)
         save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+        
+    # 수정/삭제 기능 관련 상태 초기화. -1은 수정 중인 답변이 없음을 의미합니다.
+    if 'editing_index' not in st.session_state:
+        st.session_state.editing_index = -1
 
     if 'recommendations' not in st.session_state:
         st.session_state.recommendations = pd.DataFrame()
@@ -175,7 +179,7 @@ def recommend_mentors(search_field, search_topic, search_style):
 
     if search_style:
         # 'style' 컬럼 사용 가정
-        mentors['score'] += mentors['style'].apply(lambda x: 1 if search_style in x else 0)
+        mentors['score'] += mentors['style'].apply(lambda x: 1 if x == search_style else 0)
 
     if search_field or search_topic or search_style:
         recommended_mentors = mentors[mentors['score'] > 0].sort_values(by='score', ascending=False)
@@ -352,28 +356,6 @@ def show_mentor_search_and_connect():
     elif not submitted:
         st.info("검색 조건을 입력하고 '🔎 검색 시작' 버튼을 눌러 멘토를 찾아보세요.")
 
-# 연령대별 색상 매핑 함수
-def get_bubble_color(age_band):
-    age_prefix = int(age_band.split(' ')[1].split('세')[0])
-    
-    if age_prefix >= 90:
-        return "#FFDDC1", "#FFDDC1" # 90대 이상 (아주 연한 주황)
-    elif age_prefix >= 80:
-        return "#FFCCB6", "#FFCCB6" # 80대 (연한 주황)
-    elif age_prefix >= 70:
-        return "#FFB5A0", "#FFB5A0" # 70대 (중간 주황)
-    elif age_prefix >= 60:
-        return "#A5DFF9", "#A5DFF9" # 60대 (연한 하늘색)
-    elif age_prefix >= 50:
-        return "#C5E6F6", "#C5E6F6" # 50대 (아주 연한 하늘색)
-    elif age_prefix >= 40:
-        return "#D2F0E1", "#D2F0E1" # 40대 (연한 녹색)
-    elif age_prefix >= 30:
-        return "#E1F8D9", "#E1F8D9" # 30대 (아주 연한 녹색)
-    elif age_prefix >= 20:
-        return "#FFF3CD", "#FFF3CD" # 20대 (연한 노랑)
-    else: # 10대
-        return "#FFEDD5", "#FFEDD5" # 10대 (아주 연한 노랑)
 
 def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
@@ -382,47 +364,47 @@ def show_daily_question():
     # 1. 디자인: 말풍선 모양 및 색상, 배경 그라데이션, 움직임 제거 Custom CSS
     st.markdown(f"""
         <style>
-        /* 움직이는 효과 제거 (keyframes float 삭제) */
-
-        /* 앱 전체 배경 따스한 그라데이션 */
+        /* 앱 전체 배경 강렬한 마젠타-퍼플 그라데이션 (첨부된 이미지 색상 기반) */
         .stApp {{
-            background: linear-gradient(135deg, #FFE0B2 0%, #FFCC80 100%); /* 따스한 오렌지-베이지 그라데이션 */
+            background: linear-gradient(135deg, #FF69B4 0%, #8A2BE2 100%); /* Hot Pink to Blue Violet */
             background-attachment: fixed; /* 스크롤 시에도 배경 고정 */
+        }}
+
+        /* Streamlit 기본 텍스트 색상 및 헤더 색상 조정 */
+        h1, h2, h3, h4, h5, h6, .stMarkdown, .stSubheader, label {{
+            color: #FFFFFF !important; /* 헤더 및 라벨 텍스트를 밝은 색으로 변경 */
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+        }}
+        div[data-testid="stText"] {{
+             color: #EEEEEE !important;
+        }}
+        /* 사이드바 텍스트 색상 */
+        .css-vk3ghm, .css-1dp54x6, .css-1aumw6k {{
+            color: #FFFFFF !important;
         }}
 
         /* 2. 말풍선 컨테이너 (st.container) 스타일링 */
         .bubble-container {{
             position: relative;
-            border-radius: 1.5em; /* 둥근 모서리 */
+            background: #ffffff; /* 모든 말풍선 흰색 */
+            border-radius: 1.5em; /* 둥근 사각형 */
             padding: 20px;
-            margin: 20px 0 35px 0; /* 꼬리가 아래로 내려올 공간 확보를 위해 아래쪽 여백 증가 */
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15); /* 그림자 강화 */
-            transition: all 0.2s ease-in-out; /* hover 효과를 위해 transition 추가 */
-            border: 1px solid rgba(0,0,0,0.1); /* 테두리 추가 */
+            margin: 20px 0 5px 0; /* 옵션 버튼 공간 확보를 위해 아래쪽 여백 조절 */
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25); /* 그림자 강화 및 입체감 추가 */
+            transition: all 0.2s ease-in-out;
+            border: 1px solid rgba(255, 255, 255, 0.8); 
         }}
         
         .bubble-container:hover {{
-            transform: translateY(-5px); /* hover 시 살짝 뜨는 효과 */
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); /* hover 시 그림자 강화 */
+            transform: translateY(-5px); 
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4); 
         }}
         
-        /* 3. 말풍선 꼬리 (Speech Bubble Tail) - 컨테이너 하단 중앙에 삼각형 추가 */
-        .bubble-container::after {{
-            content: '';
-            position: absolute;
-            bottom: -20px; /* 꼬리가 아래로 튀어나오도록 조정 */
-            left: 50%;
-            transform: translateX(-50%);
-            width: 0;
-            height: 0;
-            border: 10px solid transparent;
-            border-bottom: 0;
-            margin-left: -10px;
-        }}
+        /* 3. 말풍선 꼬리 제거: ::after 의사 요소 삭제 */
         
         /* 4. Streamlit 기본 컨테이너의 패딩/마진 재설정 */
         div[data-testid="stVerticalBlock"] > div:not(:first-child) > div {{
-            padding: 0; /* st.container의 불필요한 패딩 제거 */
+            padding: 0; 
         }}
         
         /* 5. 답변 텍스트 스타일 */
@@ -435,25 +417,43 @@ def show_daily_question():
 
         /* 6. 이름/나이대 정보 스타일 */
         .bubble-info {{
-            font-size: 1em; /* 폰트 크기 조절 */
-            font-weight: bold; /* 이름 부분만 볼드체 */
-            color: #444444;
-            border-bottom: 1px solid rgba(0,0,0,0.1); /* 얇은 구분선 */
+            font-size: 1em; 
+            font-weight: bold; 
+            color: #6A0DAD; /* 이름 정보를 퍼플 계열로 강조 */
+            border-bottom: 1px solid rgba(0,0,0,0.1); 
             padding-bottom: 8px;
             margin-bottom: 12px;
         }}
+        
+        /* 폼 배경색을 흰색으로 설정하여 가독성 높임 */
+        div[data-testid="stForm"] {{
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }}
+        div[data-testid="stForm"] label {{
+            color: #333333 !important; 
+            text-shadow: none;
+        }}
 
-        /* 연령대별 말풍선 색상 CSS 클래스 */
-        .age-10s {{ background-color: #FFEDD5; }} .age-10s::after {{ border-top-color: #FFEDD5; }}
-        .age-20s {{ background-color: #FFF3CD; }} .age-20s::after {{ border-top-color: #FFF3CD; }}
-        .age-30s {{ background-color: #E1F8D9; }} .age-30s::after {{ border-top-color: #E1F8D9; }}
-        .age-40s {{ background-color: #D2F0E1; }} .age-40s::after {{ border-top-color: #D2F0E1; }}
-        .age-50s {{ background-color: #C5E6F6; }} .age-50s::after {{ border-top-color: #C5E6F6; }}
-        .age-60s {{ background-color: #A5DFF9; }} .age-60s::after {{ border-top-color: #A5DFF9; }}
-        .age-70s {{ background-color: #FFB5A0; }} .age-70s::after {{ border-top-color: #FFB5A0; }}
-        .age-80s {{ background-color: #FFCCB6; }} .age-80s::after {{ border-top-color: #FFCCB6; }}
-        .age-90s-plus {{ background-color: #FFDDC1; }} .age-90s-plus::after {{ border-top-color: #FFDDC1; }}
-
+        /* 수정/삭제 메뉴 버튼 (점 세 개 역할) 스타일 */
+        .stExpander {{
+            margin-top: 5px;
+            margin-bottom: 15px; /* 다음 말풍선과의 간격 조정 */
+        }}
+        .stExpander>div[role="button"] {{
+            padding: 0;
+            background-color: transparent !important;
+            color: #FFFFFF !important;
+            font-size: 1.2em; /* 점 세 개 아이콘 크기 */
+            text-align: right;
+        }}
+        .stExpanderDetails {{
+            background-color: rgba(255, 255, 255, 0.1); /* 메뉴 배경 투명하게 */
+            border: none !important;
+            padding: 5px;
+        }}
         </style>
     """, unsafe_allow_html=True)
 
@@ -463,61 +463,94 @@ def show_daily_question():
 
     # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
     if st.session_state.daily_answers:
-        # 답변 순서는 이름순으로 정렬
-        sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: x['name'], reverse=False)
-
-        # 3열 레이아웃으로 변경하여 여러 개의 말풍선을 동시에 보여줌
+        # 원본 리스트를 직접 수정하기 위해 정렬하지 않고 사용합니다. (인덱스 유지)
+        sorted_answers = st.session_state.daily_answers 
+        current_name = st.session_state.user_profile.get('name')
+        
         cols = st.columns(3)
         
         for i, ans in enumerate(sorted_answers):
-            # 연령대별 클래스 동적 할당
-            age_prefix_num = int(ans['age_band'].split(' ')[1].split('세')[0])
-            if age_prefix_num >= 90:
-                age_class = "age-90s-plus"
-            elif age_prefix_num >= 80:
-                age_class = "age-80s"
-            elif age_prefix_num >= 70:
-                age_class = "age-70s"
-            elif age_prefix_num >= 60:
-                age_class = "age-60s"
-            elif age_prefix_num >= 50:
-                age_class = "age-50s"
-            elif age_prefix_num >= 40:
-                age_class = "age-40s"
-            elif age_prefix_num >= 30:
-                age_class = "age-30s"
-            elif age_prefix_num >= 20:
-                age_class = "age-20s"
-            else: # 10대
-                age_class = "age-10s"
-
             with cols[i % 3]:
-                # st.container를 사용하고 커스텀 CSS 클래스를 적용하여 말풍선 모양을 만듭니다.
-                # 연령대별 클래스를 bubble-container에 추가
-                st.markdown(
-                    f"""
-                    <div class='bubble-container {age_class}'>
-                        <p class='bubble-info'>
-                            [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
-                        </p>
-                        <p class='bubble-answer'>
-                            {ans['answer']}
-                        </p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                is_owner = (ans['name'] == current_name)
+                
+                # ---------------------- 수정 모드 --------------------------
+                if st.session_state.editing_index == i:
+                    with st.form(f"edit_form_{i}", clear_on_submit=False):
+                        st.markdown(f"**답변 수정 [{ans['age_band']}]**", unsafe_allow_html=True)
+                        edited_text = st.text_area("수정 내용", ans['answer'], height=100, key=f"edit_text_{i}")
+                        col_save, col_cancel = st.columns(2)
+                        
+                        with col_save:
+                            if st.form_submit_button("저장", type="primary", use_container_width=True):
+                                if edited_text:
+                                    st.session_state.daily_answers[i]['answer'] = edited_text
+                                    st.session_state.editing_index = -1
+                                    save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                                    st.success("✅ 답변이 성공적으로 수정되었습니다!")
+                                    st.rerun()
+                                else:
+                                    st.error("수정할 내용을 입력해 주세요.")
+                        with col_cancel:
+                            if st.form_submit_button("취소", use_container_width=True):
+                                st.session_state.editing_index = -1
+                                st.rerun()
+                
+                # ---------------------- 일반 표시 모드 --------------------------
+                else:
+                    # 마크다운을 사용하여 말풍선 및 내용 표시
+                    st.markdown(
+                        f"""
+                        <div class='bubble-container'>
+                            <p class='bubble-info'>
+                                [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
+                            </p>
+                            <p class='bubble-answer'>
+                                {ans['answer']}
+                            </p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                    
+                    # 소유자에게만 수정/삭제 메뉴 표시 (점 세 개 역할)
+                    if is_owner:
+                        # Streamlit Expander를 점 세 개 메뉴처럼 사용하여 옵션 제공
+                        with st.expander("... 옵션", expanded=False): 
+                            col_e, col_d = st.columns(2)
+                            
+                            with col_e:
+                                if st.button("✏️ 수정", key=f"edit_{i}", use_container_width=True):
+                                    st.session_state.editing_index = i
+                                    st.rerun()
+                            
+                            with col_d:
+                                if st.button("🗑️ 삭제", key=f"delete_{i}", use_container_width=True, type="secondary"):
+                                    # 삭제 확인은 한 번 더 질문하는 방식으로 진행
+                                    st.warning(f"정말로 답변을 삭제하시겠습니까?", icon="⚠️")
+                                    col_confirm, col_cancel = st.columns(2)
+                                    with col_confirm:
+                                        if st.button("✅ 예, 삭제합니다.", key=f"confirm_delete_{i}", use_container_width=True):
+                                            del st.session_state.daily_answers[i]
+                                            save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                                            st.toast("🗑️ 답변이 삭제되었습니다.")
+                                            st.rerun()
+                                    with col_cancel:
+                                        if st.button("❌ 취소", key=f"cancel_delete_{i}", use_container_width=True):
+                                            st.info("삭제가 취소되었습니다.")
+                                            st.rerun()
+
 
     st.divider()
 
     # --- 답변 작성 폼 ---
-    st.subheader("나의 답변 작성하기")
+    st.subheader("나의 답변 작성")
     current_name = st.session_state.user_profile.get('name', '익명')
     current_age = st.session_state.user_profile.get('age_band', '미등록')
 
     with st.form("answer_form"):
-        answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
-        submitted = st.form_submit_button("답변 제출")
+        # "질문에 대한 당신의 생각을 적어주세요." 텍스트 삭제, placeholder로 대체
+        answer_text = st.text_area("", max_chars=500, height=150, placeholder="여기에 당신의 생각을 자유롭게 적어주세요...")
+        submitted = st.form_submit_button("답변 제출", type="primary")
 
         if submitted:
             if answer_text:
@@ -531,7 +564,7 @@ def show_daily_question():
                 # 🌟 수정: 답변 데이터 영구 저장
                 save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
 
-                st.success("✅ 답변이 성공적으로 제출되었습니다! 이제 말풍선 목록에서 바로 확인하실 수 있습니다.")
+                st.success("✅ 답변이 성공적으로 제출되었습니다! 이제 목록에서 바로 확인하실 수 있습니다.")
                 st.rerun() 
             else:
                 st.warning("답변 내용을 입력해 주세요.")
@@ -585,7 +618,7 @@ def main():
 
     if not st.session_state.logged_in:
         # 로그인/회원가입 선택
-        auth_option = st.radio("서비스 시작", ["로그인", "회원 가입"], index=0, horizontal=True)
+        auth_option = st.sidebar.radio("서비스 시작", ["로그인", "회원 가입"], index=0, horizontal=True)
         if auth_option == "로그인":
             show_login_form()
         else:
