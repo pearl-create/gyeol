@@ -200,32 +200,14 @@ def recommend_mentors(search_field, search_topic, search_style):
 def show_mentor_search_and_connect():
     """멘토 검색 및 연결 기능을 표시합니다."""
     
-    # 멘토 찾기 페이지 전용 CSS 스타일 (블루 계열)
+    # 멘토 찾기 페이지 전용 CSS 스타일을 제거하고, 전체 앱 CSS만 적용되도록 함
+    # 다만, 멘토 카드가 눈에 잘 띄도록 일반적인 Streamlit 컨테이너 스타일은 유지합니다.
     st.markdown("""
         <style>
-        /* 멘토 찾기 페이지 전용 배경 (시원한 블루 계열) */
-        /* 전체 앱 배경은 노랑-민트지만, 이 영역에만 별도 배경 적용 */
-        [data-testid="stVerticalBlock"] > div:nth-child(1) {
-            /* 시원하고 깔끔한 블루/화이트 그라데이션 적용 */
-            background: linear-gradient(135deg, #ADD8E6 0%, #B0E0E6 100%); 
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        }
-        
-        /* 검색 폼 배경을 흰색으로 만들어 가독성 확보 */
-        div[data-testid="stForm"] {
-            background-color: rgba(255, 255, 255, 0.95);
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
-        
-        /* 멘토 카드 컨테이너 스타일 */
+        /* 멘토 카드 컨테이너 스타일 (기본 흰색 바탕에 포인트 색상) */
         .stContainer {
-            background-color: #f7f9fc !important; /* 연한 배경 */
-            /* 포인트 색상을 시원한 파랑 계열로 변경 */
-            border-left: 5px solid #1E90FF !important; 
+            background-color: #ffffff !important; 
+            border-left: 5px solid #FFD700 !important; /* 노란색 포인트 유지 */
             border-radius: 8px;
             padding: 15px;
             margin-bottom: 15px;
@@ -236,23 +218,14 @@ def show_mentor_search_and_connect():
             transform: translateY(-2px);
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
         }
-
-        /* 멘토 찾기 섹션의 모든 텍스트 색상을 대비되게 설정 */
-        div.stVerticalBlock > div:nth-child(1) h1,
-        div.stVerticalBlock > div:nth-child(1) h2,
-        div.stVerticalBlock > div:nth-child(1) h3,
-        div.stVerticalBlock > div:nth-child(1) h4,
-        div.stVerticalBlock > div:nth-child(1) label,
-        div.stVerticalBlock > div:nth-child(1) .stMarkdown {
-            color: #1F2937 !important; /* 기본 텍스트는 짙은 색으로 유지하여 가독성 확보 */
-            text-shadow: none;
+        
+        /* 검색 폼 배경색을 흰색으로 유지 */
+        div[data-testid="stForm"] {
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
-
-        /* 멘토 카드 내 텍스트는 흰색 배경 위에 있으므로 어두운 색 유지 */
-        .stContainer h4, .stContainer p, .stContainer strong, .stContainer em {
-            color: #333333 !important;
-        }
-
         </style>
     """, unsafe_allow_html=True) 
 
@@ -670,7 +643,6 @@ def main():
     # --- 메인 페이지 흐름 제어 ---
     st.sidebar.title("메뉴")
     
-    # ⭐ 제목 위의 노란색 박스 제거 (이전 버전에 있던 st.markdown 주석 처리 또는 제거)
     st.title("👵👴 결(멘티용)🧑‍💻") 
 
     if not st.session_state.logged_in:
@@ -702,8 +674,6 @@ def main():
         if page == "멘토 찾기":
             show_mentor_search_and_connect()
         elif page == "오늘의 질문":
-            # 오늘의 질문 페이지는 배경을 앱 전체 CSS에 의존하며,
-            # 버블 스타일만 show_daily_question 함수 내에서 적용됩니다.
             show_daily_question()
 
 if __name__ == "__main__":
