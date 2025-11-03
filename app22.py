@@ -12,7 +12,7 @@ MENTOR_CSV_PATH = "멘토더미.csv"
 USERS_FILE_PATH = "users.json" # 사용자 계정 정보를 저장할 파일 경로
 ANSWERS_FILE_PATH = "daily_answers.json" # 오늘의 질문 답변을 저장할 파일 경로
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
-GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy"
+GOOGLE_MEET_URL = "https://pearl-create.github.io/callingjebalchoijong/"
 
 # --- 상수 및 옵션 정의 ---
 GENDERS = ["남", "여", "기타"]
@@ -631,7 +631,7 @@ def main():
         )
 
         st.success(f"✅ **{mentor_name} 멘토**님과의 화상 채팅 연결이 새로운 탭에서 시작되었습니다.")
-        st.markdown(f"**[Google Meet 연결 바로가기: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
+        st.markdown(f"**[화상통화: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
 
         if st.button("⬅️ 다른 멘토 찾아보기"):
             st.session_state.connecting = False
