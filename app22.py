@@ -3,7 +3,7 @@ import pandas as pd
 import random
 import time
 import os
-import json 
+import json
 
 # --- 1. 데이터 로드 및 상수 정의 ---
 
