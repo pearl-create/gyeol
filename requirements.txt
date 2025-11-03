@@ -1,10 +1,12 @@
-streamlit>=1.37.0
-pandas>=2.0.0
-scikit-learn>=1.4.0
-numpy>=1.26.0
+# 기존
+streamlit==1.39.0
+pandas==2.2.2
+scikit-learn==1.5.2
+numpy==1.26.4
 
-# 🔽 Teachable Machine + 오디오 분류용 추가 패키지
+# 오디오 분류 + WebRTC
 streamlit-webrtc==0.47.7
+aiortc==1.9.0
 av==12.3.0
 tflite-support==0.4.3
 pydub==0.25.1
