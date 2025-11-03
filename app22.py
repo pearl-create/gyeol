@@ -3,13 +3,22 @@ import pandas as pd
 import random
 import time
 import os
-import json # JSON 파일 저장을 위해 import
+import json  # JSON 파일 저장을 위해 import
+
+# =========================================================
+# 스트림릿 페이지 설정 (가능하면 가장 먼저 호출)
+# =========================================================
+st.set_page_config(
+    page_title="세대 간 멘토링 플랫폼",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # --- 1. 데이터 로드 및 상수 정의 ---
 
 MENTOR_CSV_PATH = "멘토더미.csv"
-USERS_FILE_PATH = "users.json" # 사용자 계정 정보를 저장할 파일 경로
-ANSWERS_FILE_PATH = "daily_answers.json" # 오늘의 질문 답변을 저장할 파일 경로
+USERS_FILE_PATH = "users.json"  # 사용자 계정 정보를 저장할 파일 경로
+ANSWERS_FILE_PATH = "daily_answers.json"  # 오늘의 질문 답변을 저장할 파일 경로
 # 가상의 화상 채팅 연결 URL (실제 연결될 URL)
 GOOGLE_MEET_URL = "https://meet.google.com/urw-iods-puy"
 
@@ -89,7 +98,6 @@ def load_mentor_data():
             try:
                 df = pd.read_csv(MENTOR_CSV_PATH, encoding='cp949')
                 df.columns = df.columns.str.strip()
-                # 파일 컬럼 이름이 'communication_style'이면 'style'로 변경하여 호환성 확보
                 if 'communication_style' in df.columns and 'style' not in df.columns:
                     df = df.rename(columns={'communication_style': 'style'})
                 return df
@@ -102,7 +110,6 @@ def load_mentor_data():
     else:
         st.error(f"Error: 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 찾을 수 없습니다.")
         return pd.DataFrame()
-
 
 # --- 2-1. 영구 저장(Persistence) 헬퍼 함수 ---
 def load_json_data(file_path, default_value):
@@ -120,18 +127,56 @@ def save_json_data(data, file_path):
     """데이터를 JSON 파일에 저장합니다."""
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
-            # ensure_ascii=False: 한글 깨짐 방지, indent=4: 가독성 높임
             json.dump(data, f, ensure_ascii=False, indent=4)
     except Exception as e:
         st.error(f"데이터 파일 저장 오류 ({file_path}): {e}")
-# ---------------------------------------------
 
+# --- 오늘의 질문 유틸: 동기화/업서트/삭제 ---
+def refresh_answers_from_disk():
+    """세션에 적재된 답변 대신, 항상 디스크의 최신 답변을 반영."""
+    latest = load_json_data(ANSWERS_FILE_PATH, [])
+    # 누락된 id를 추가(과거 데이터 호환)
+    changed = False
+    for a in latest:
+        if 'id' not in a:
+            a['id'] = int(time.time() * 1000) + random.randint(0, 999)
+            changed = True
+    if changed:
+        save_json_data(latest, ANSWERS_FILE_PATH)
+    st.session_state.daily_answers = latest
+
+def upsert_answer(answer_obj):
+    """답변 신규/수정 후 디스크에 반영하고 즉시 리로드."""
+    data = load_json_data(ANSWERS_FILE_PATH, [])
+    # id가 없으면 신규
+    if 'id' not in answer_obj:
+        answer_obj['id'] = int(time.time() * 1000) + random.randint(0, 999)
+    # 동일 id 있으면 교체
+    found = False
+    for i, a in enumerate(data):
+        if a.get('id') == answer_obj['id']:
+            data[i] = answer_obj
+            found = True
+            break
+    if not found:
+        data.append(answer_obj)
+    save_json_data(data, ANSWERS_FILE_PATH)
+    refresh_answers_from_disk()
+
+def delete_answer_by_id(answer_id: int):
+    """id로 답변 삭제."""
+    data = load_json_data(ANSWERS_FILE_PATH, [])
+    data = [a for a in data if a.get('id') != answer_id]
+    save_json_data(data, ANSWERS_FILE_PATH)
+    refresh_answers_from_disk()
+
+# ---------------------------------------------
 
 def initialize_session_state():
     mentors_df = load_mentor_data()
     st.session_state.mentors_df = mentors_df
 
-    # 🌟 수정: 영구 저장된 사용자 데이터를 로드
+    # 영구 저장된 사용자 데이터 로드
     st.session_state.all_users = load_json_data(USERS_FILE_PATH, {})
 
     if 'logged_in' not in st.session_state:
@@ -139,24 +184,19 @@ def initialize_session_state():
     if 'user_profile' not in st.session_state:
         st.session_state.user_profile = {}
 
-    # 🌟 수정: 영구 저장된 답변 데이터를 로드하거나, 없으면 초기 답변을 생성
+    # 답변 데이터 로드 (없으면 빈 리스트로 파일 생성)
     daily_answers_from_file = load_json_data(ANSWERS_FILE_PATH, None)
-
     if daily_answers_from_file is not None:
         st.session_state.daily_answers = daily_answers_from_file
     else:
-        # 초기 답변 생성 로직 (파일이 없을 경우): 완전히 빈 리스트로 초기화하여 샘플 답변을 제거합니다.
-        initial_answers = []
-
-        # 기존의 샘플 답변 생성 로직(윤슬조, 다효니 답변)은 삭제되었습니다.
-        # 데이터 로드 실패 시의 최소 샘플 답변("샘플1")도 제거하여 깨끗한 상태로 시작합니다.
-
-        st.session_state.daily_answers = initial_answers
-        # 초기 답변이 생성되면 파일에 저장 (최초 1회)
+        st.session_state.daily_answers = []
         save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
 
     if 'recommendations' not in st.session_state:
         st.session_state.recommendations = pd.DataFrame()
+
+    if 'editing_answer_id' not in st.session_state:
+        st.session_state.editing_answer_id = None
 
 initialize_session_state()
 
@@ -178,7 +218,6 @@ def recommend_mentors(search_field, search_topic, search_style):
         )
 
     if search_style:
-        # 'style' 컬럼 사용 가정
         mentors['score'] += mentors['style'].apply(lambda x: 1 if search_style in x else 0)
 
     if search_field or search_topic or search_style:
@@ -188,7 +227,6 @@ def recommend_mentors(search_field, search_topic, search_style):
 
     return recommended_mentors.reset_index(drop=True)
 
-
 # --- 4. 인증/회원가입/UI 함수 정의 ---
 
 def show_login_form():
@@ -197,7 +235,6 @@ def show_login_form():
 
     with st.form("login_form"):
         name = st.text_input("이름을 입력하세요 (가입 시 사용한 이름)", placeholder="홍길동")
-
         submitted = st.form_submit_button("로그인")
 
         if submitted:
@@ -272,7 +309,6 @@ def show_registration_form():
                 st.session_state.user_profile = user_profile_data
                 st.session_state.logged_in = True
 
-                # 🌟 수정: 사용자 데이터 영구 저장
                 save_json_data(st.session_state.all_users, USERS_FILE_PATH)
 
                 st.success(f"🎉 {name}님, 성공적으로 가입 및 로그인되었습니다!")
@@ -290,13 +326,19 @@ def show_mentor_search_and_connect():
     with st.form("mentor_search_form"):
         col_f, col_t, col_s = st.columns(3)
 
-        available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
+        available_topics = sorted([
+            t for t in set(
+                t.strip()
+                for items in mentors['topic_prefs'].astype(str).str.split('[,;]')
+                for t in items if t.strip()
+            )
+        ])
 
         # 'style' 컬럼을 사용하도록 가정하고, 해당 컬럼의 고유값을 스타일 옵션으로 사용
         if 'style' in mentors.columns:
             available_styles = sorted(list(mentors['style'].dropna().unique()))
         else:
-            available_styles = sorted(list(COMM_STYLES.keys())) # fallback
+            available_styles = sorted(list(COMM_STYLES.keys()))  # fallback
 
         available_fields_clean = sorted(OCCUPATION_GROUPS)
 
@@ -333,7 +375,7 @@ def show_mentor_search_and_connect():
 
         for index, row in st.session_state.recommendations.iterrows():
             with st.container(border=True):
-                col_name, col_score = st.columns([3, 1])
+                col_name, _ = st.columns([3, 1])
                 with col_name:
                     st.markdown(f"#### 👤 {row['name']} ({row['age_band']})")
                 col_m1, col_m2, col_m3 = st.columns(3)
@@ -342,7 +384,6 @@ def show_mentor_search_and_connect():
                 with col_m2:
                     st.markdown(f"**주요 주제:** {row['topic_prefs']}")
                 with col_m3:
-                    # 'style' 컬럼 값 출력 가정
                     st.markdown(f"**소통 스타일:** {row['style']}")
 
                 st.markdown(f"**멘토 한마디:** _{row['intro']}_")
@@ -356,7 +397,6 @@ def show_mentor_search_and_connect():
     elif not submitted:
         st.info("검색 조건을 입력하고 '🔎 검색 시작' 버튼을 눌러 멘토를 찾아보세요.")
 
-
 def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
@@ -364,58 +404,152 @@ def show_daily_question():
     daily_q = "🤔 **'나와 전혀 다른 세대의 삶을 하루만 살아볼 수 있다면, 어떤 세대의 삶을 살아보고 싶은지 이유와 함께 알려주세요!'**"
     st.subheader(daily_q)
 
-    # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
-    if st.session_state.daily_answers:
-        # 답변 순서는 이름순으로 정렬
-        sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: x['name'], reverse=False)
+    # 항상 디스크 최신 데이터로 동기화 (다른 사용자의 새 답변도 새로고침 즉시 반영)
+    refresh_answers_from_disk()
 
-        for ans in sorted_answers:
-            with st.expander(f"[{ans['age_band']}] **{ans['name']}**님의 답변"):
-                st.write(ans['answer'])
+    # 말풍선 스타일
+    st.markdown(
+        """
+        <style>
+        .bubble-wrap { display: flex; gap: 12px; align-items: flex-start; margin: 8px 0 18px 0; }
+        .bubble {
+            max-width: 100%;
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: #f5f7ff;
+            border: 1px solid #e3e8ff;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+            line-height: 1.6;
+            word-break: break-word;
+        }
+        .meta {
+            font-size: 12px;
+            color: #5a5f7a;
+            margin-bottom: 6px;
+        }
+        .owner-badge {
+            display: inline-block;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 8px;
+            background: #eefcf1;
+            color: #147d3f;
+            border: 1px solid #c8f3d2;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .owner .bubble { background: #eef6ff; border-color: #cfe4ff; }
+        .answer-actions { margin-top: 6px; }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
-    st.divider()
-
-    # --- 답변 작성 폼 ---
-    st.subheader("나의 답변 작성하기")
-    current_name = st.session_state.user_profile.get('name', '익명')
+    # 현재 로그인 정보
+    current_name = st.session_state.user_profile.get('name', '')
     current_age = st.session_state.user_profile.get('age_band', '미등록')
 
-    with st.form("answer_form"):
-        answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
-        submitted = st.form_submit_button("답변 제출")
+    # ===== 답변 작성 폼 =====
+    st.divider()
+    st.subheader("나의 답변 작성하기")
+
+    # 신규 작성 폼 (수정 모드가 아닐 때만 보여줌)
+    if st.session_state.editing_answer_id is None:
+        with st.form("answer_form"):
+            answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
+            submitted = st.form_submit_button("답변 제출")
 
         if submitted:
-            if answer_text:
+            if not current_name:
+                st.warning("로그인 후 작성할 수 있습니다.")
+            elif answer_text.strip():
                 new_answer = {
+                    "id": int(time.time() * 1000) + random.randint(0, 999),
                     "name": current_name,
                     "age_band": current_age,
-                    "answer": answer_text
+                    "answer": answer_text.strip()
                 }
-                st.session_state.daily_answers.append(new_answer)
-
-                # 🌟 수정: 답변 데이터 영구 저장
-                save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
-
-                st.success("답변이 제출되었습니다. 페이지를 새로고침하면(R 키) 누적된 답변을 볼 수 있습니다.")
+                upsert_answer(new_answer)
+                st.success("답변이 제출되었습니다.")
                 st.rerun()
             else:
                 st.warning("답변 내용을 입력해 주세요.")
 
+    # ===== 답변 리스트 (처음부터 내용이 보이도록, Expander 사용 X) =====
+    st.divider()
+    st.subheader(f"📬 누적 답변 ({len(st.session_state.daily_answers)}명)")
 
-# --- 5. 메인 앱 실행 함수 (디버그 패널 포함) ---
+    if not st.session_state.daily_answers:
+        st.info("아직 등록된 답변이 없습니다. 첫 번째 답변을 남겨보세요!")
+        return
+
+    # 기본: 이름순(원하면 최신순으로 변경 가능)
+    answers_sorted = sorted(st.session_state.daily_answers, key=lambda x: x.get('name', ''))
+
+    for a in answers_sorted:
+        a_id = a.get('id')
+        a_name = a.get('name', '익명')
+        a_age = a.get('age_band', '미등록')
+        a_text = a.get('answer', '')
+        is_owner = (current_name and a_name == current_name)
+
+        # 수정 모드인지 여부
+        editing_this = (st.session_state.editing_answer_id == a_id)
+
+        with st.container():
+            st.markdown(f'<div class="bubble-wrap {"owner" if is_owner else ""}">', unsafe_allow_html=True)
+            st.markdown('<div class="bubble">', unsafe_allow_html=True)
+
+            # 메타 정보 (이름/나이대/본인 배지)
+            owner_badge = ' <span class="owner-badge">내 답변</span>' if is_owner else ''
+            st.markdown(f'<div class="meta">[{a_age}] <strong>{a_name}</strong>{owner_badge}</div>', unsafe_allow_html=True)
+
+            if editing_this:
+                # ====== 수정 폼 ======
+                with st.form(f"edit_form_{a_id}"):
+                    new_text = st.text_area("내용 수정", a_text, max_chars=500, height=140, key=f"edit_text_{a_id}")
+                    c1, c2 = st.columns([1, 1])
+                    with c1:
+                        ok = st.form_submit_button("💾 저장")
+                    with c2:
+                        cancel = st.form_submit_button("취소")
+
+                if ok:
+                    if new_text.strip():
+                        a['answer'] = new_text.strip()
+                        upsert_answer(a)
+                        st.session_state.editing_answer_id = None
+                        st.success("수정되었습니다.")
+                        st.rerun()
+                    else:
+                        st.warning("내용이 비어 있습니다.")
+
+                if cancel:
+                    st.session_state.editing_answer_id = None
+                    st.rerun()
+
+            else:
+                # ====== 평상시(읽기 전용) ======
+                st.markdown(a_text.replace("\n", "<br>"), unsafe_allow_html=True)
+
+                # 소유자만 수정/삭제 버튼
+                if is_owner:
+                    c1, c2, _ = st.columns([0.15, 0.15, 0.7])
+                    with c1:
+                        if st.button("✏️ 수정", key=f"btn_edit_{a_id}"):
+                            st.session_state.editing_answer_id = a_id
+                            st.rerun()
+                    with c2:
+                        if st.button("🗑️ 삭제", key=f"btn_del_{a_id}"):
+                            delete_answer_by_id(a_id)
+                            st.success("삭제되었습니다.")
+                            st.rerun()
+
+            st.markdown('</div></div>', unsafe_allow_html=True)  # bubble / wrap 닫기
+
+# --- 5. 메인 앱 실행 함수 ---
 
 def main():
-    st.set_page_config(
-        page_title="세대 간 멘토링 플랫폼",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-
-    if st.session_state.mentors_df.empty and not st.session_state.logged_in:
-        st.title("👵👴 플랫폼 준비 중 🧑‍💻")
-        st.error(f"⚠️ 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 로드하지 못했습니다. 파일을 확인해 주세요.")
-        st.stop()
-
     # --- 연결 프로세스 처리 ---
     if st.session_state.get('connecting'):
         mentor_name = st.session_state.connect_mentor_name
@@ -445,7 +579,6 @@ def main():
 
     # --- 메인 페이지 흐름 제어 ---
     st.sidebar.title("메뉴")
-
     st.title("👵👴 결(멘티용)🧑‍💻")
 
     if not st.session_state.logged_in:
