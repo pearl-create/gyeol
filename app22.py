@@ -455,9 +455,6 @@ def show_daily_question():
             font-size: 1.5em; 
             cursor: pointer;
             z-index: 20;
-            /* 수직 정렬을 위해 텍스트 회전을 시도하거나, font-family를 사용하여 수직 점을 강제하는 방법이 있으나, */
-            /* 가장 깔끔하게 수직으로 보이게 하려면 유니코드 수직 점(⋮)을 사용하거나 폰트를 조정해야 합니다. */
-            /* 여기서는 기본 '...'의 위치만 조정하고, Streamlit의 기본 동작을 이용합니다. */
         }}
 
         /* Expander 컨텐츠 (Edit/Delete 버튼) 스타일 조정 */
@@ -474,15 +471,6 @@ def show_daily_question():
             z-index: 30;
         }}
         
-        /* 멘션: .bubble-container 안에서 st.expander의 위치를 조정하기 위해
-        st.expander를 렌더링하는 컨테이너의 마진을 제거해야 합니다.
-        하지만 st.expander는 st.column 내부에서 렌더링되므로, 직접적인 부모를 타겟팅하기 어렵습니다.
-        따라서, Expander가 렌더링될 때 컨테이너(.bubble-container)의 padding-top을 충분히 확보하는 것이 중요합니다.
-        */
-        
-        /* Expander의 Label을 수직 점 3개 (⋮)로 변경하고 싶다면, Python 코드에서 변경해야 합니다. 
-           (현재 '...'으로 되어 있음) */
-
         </style>
     """, unsafe_allow_html=True)
 
@@ -495,15 +483,12 @@ def show_daily_question():
         sorted_answers = st.session_state.daily_answers 
         current_name = st.session_state.user_profile.get('name')
         
-        # Streamlit의 컬럼 구조를 사용하여 답변을 3개씩 나열합니다.
-        # 주의: 이 방법은 st.expander를 정확하게 .bubble-container 안에 위치시키기 어렵게 만듭니다.
-        # 해결책: 답변 컨테이너와 메뉴 버튼을 하나의 컴포넌트로 묶어 처리합니다.
-        
         cols = st.columns(3)
         
         for i, ans in enumerate(sorted_answers):
             # 답변 하나당 하나의 컬럼 컨테이너에 들어갑니다.
             with cols[i % 3]: 
+                # ------------------- 📌 중요: 소유자 체크 --------------------
                 is_owner = (ans['name'] == current_name)
                 
                 # ---------------------- 수정 모드 --------------------------
@@ -549,8 +534,6 @@ def show_daily_question():
                     # 소유자에게만 수정/삭제 메뉴 표시 (점 세 개 역할)
                     if is_owner:
                         # Streamlit Expander를 점 세 개 메뉴처럼 사용하여 옵션 제공
-                        # 레이블을 '...' 대신 유니코드 수직 점 '⋮'로 변경하여 수직 정렬 느낌을 강화합니다.
-                        # CSS는 위에서 .bubble-container를 기준으로 절대 위치를 잡아주도록 수정했습니다.
                         with st.expander("⋮", expanded=False): 
                             col_e, col_d = st.columns(2)
                             
