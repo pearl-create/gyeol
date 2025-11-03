@@ -389,7 +389,8 @@ def show_daily_question():
             background: #ffffff; /* 모든 말풍선 흰색 */
             border-radius: 1.5em; /* 둥근 사각형 */
             padding: 20px;
-            margin: 20px 0 5px 0; /* 옵션 버튼 공간 확보를 위해 아래쪽 여백 조절 */
+            padding-top: 40px; /* 옵션 버튼 공간 확보를 위해 위쪽 패딩 증가 */
+            margin: 20px 0 5px 0; 
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25); /* 그림자 강화 및 입체감 추가 */
             transition: all 0.2s ease-in-out;
             border: 1px solid rgba(255, 255, 255, 0.8); 
@@ -400,14 +401,7 @@ def show_daily_question():
             box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4); 
         }}
         
-        /* 3. 말풍선 꼬리 제거: ::after 의사 요소 삭제 */
-        
-        /* 4. Streamlit 기본 컨테이너의 패딩/마진 재설정 */
-        div[data-testid="stVerticalBlock"] > div:not(:first-child) > div {{
-            padding: 0; 
-        }}
-        
-        /* 5. 답변 텍스트 스타일 */
+        /* 3. 답변 텍스트 스타일 */
         .bubble-answer {{
             font-size: 1.1em;
             line-height: 1.6;
@@ -415,7 +409,7 @@ def show_daily_question():
             margin-top: 10px;
         }}
 
-        /* 6. 이름/나이대 정보 스타일 */
+        /* 4. 이름/나이대 정보 스타일 */
         .bubble-info {{
             font-size: 1em; 
             font-weight: bold; 
@@ -423,9 +417,12 @@ def show_daily_question():
             border-bottom: 1px solid rgba(0,0,0,0.1); 
             padding-bottom: 8px;
             margin-bottom: 12px;
+            position: absolute; /* 옵션 버튼과 겹치지 않도록 절대 위치 지정 */
+            top: 15px;
+            left: 20px;
         }}
         
-        /* 폼 배경색을 흰색으로 설정하여 가독성 높임 */
+        /* 5. 폼 배경색을 흰색으로 설정하여 가독성 높임 */
         div[data-testid="stForm"] {{
             background-color: rgba(255, 255, 255, 0.9);
             border-radius: 15px;
@@ -437,23 +434,45 @@ def show_daily_question():
             text-shadow: none;
         }}
 
-        /* 수정/삭제 메뉴 버튼 (점 세 개 역할) 스타일 */
-        .stExpander {{
-            margin-top: 5px;
-            margin-bottom: 15px; /* 다음 말풍선과의 간격 조정 */
+        /* 6. 수정/삭제 메뉴 버튼 (점 세 개 역할) 스타일: 답변 박스 오른쪽 상단에 위치시키기 */
+        /* st.expander가 생성하는 최상위 div를 타겟팅 */
+        div[data-testid^="stExpander"] {{
+            /* st.expander를 .bubble-container의 영역으로 끌어올리기 위해 마진 조정 */
+            margin-top: -65px !important; 
+            margin-bottom: 0px !important; 
+            /* 내부에서 절대 위치를 사용하므로 z-index는 높게 유지 */
+            z-index: 10; 
         }}
-        .stExpander>div[role="button"] {{
-            padding: 0;
+        
+        /* st.expander의 버튼 부분 (타이틀 '...')을 오른쪽 상단에 고정 */
+        div[data-testid^="stExpander"] > div[role="button"] {{
+            position: absolute;
+            top: 20px; /* .bubble-container의 상단에서 20px 아래로 배치 */
+            right: 20px; /* 오른쪽에서 20px 간격으로 배치 */
+            padding: 5px; 
             background-color: transparent !important;
-            color: #FFFFFF !important;
-            font-size: 1.2em; /* 점 세 개 아이콘 크기 */
+            color: #6A0DAD !important; /* 점 색상을 보라색으로 */
+            font-size: 1.5em; /* 점 세 개 아이콘 크기 */
             text-align: right;
+            border-radius: 50%;
+            cursor: pointer;
+            width: auto; /* 너비를 내용에 맞게 조정 */
         }}
-        .stExpanderDetails {{
-            background-color: rgba(255, 255, 255, 0.1); /* 메뉴 배경 투명하게 */
-            border: none !important;
-            padding: 5px;
+
+        /* Expander 컨텐츠 (Edit/Delete 버튼) 스타일 조정 */
+        div[data-testid^="stExpander"] .stExpanderDetails {{
+            position: absolute; /* 버튼 아래로 드롭다운 메뉴 위치 */
+            right: 20px; 
+            top: 45px; /* 버튼 바로 아래로 드롭다운 */
+            background-color: #ffffff; 
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            width: 150px;
+            z-index: 20;
         }}
+
         </style>
     """, unsafe_allow_html=True)
 
@@ -470,11 +489,13 @@ def show_daily_question():
         cols = st.columns(3)
         
         for i, ans in enumerate(sorted_answers):
-            with cols[i % 3]:
+            # 답변 하나당 하나의 컬럼 컨테이너에 들어갑니다.
+            with cols[i % 3]: 
                 is_owner = (ans['name'] == current_name)
                 
                 # ---------------------- 수정 모드 --------------------------
                 if st.session_state.editing_index == i:
+                    # 수정 모드일 때는 일반 말풍선 대신 수정 폼을 표시합니다.
                     with st.form(f"edit_form_{i}", clear_on_submit=False):
                         st.markdown(f"**답변 수정 [{ans['age_band']}]**", unsafe_allow_html=True)
                         edited_text = st.text_area("수정 내용", ans['answer'], height=100, key=f"edit_text_{i}")
@@ -515,7 +536,8 @@ def show_daily_question():
                     # 소유자에게만 수정/삭제 메뉴 표시 (점 세 개 역할)
                     if is_owner:
                         # Streamlit Expander를 점 세 개 메뉴처럼 사용하여 옵션 제공
-                        with st.expander("... 옵션", expanded=False): 
+                        # 레이블을 '...'로 줄이고 CSS로 위치를 조정하여 말풍선 안에 있는 것처럼 보이게 합니다.
+                        with st.expander("...", expanded=False): 
                             col_e, col_d = st.columns(2)
                             
                             with col_e:
@@ -524,19 +546,22 @@ def show_daily_question():
                                     st.rerun()
                             
                             with col_d:
+                                # 삭제 버튼을 누르면 바로 삭제되지 않고 확인 절차를 거칩니다.
                                 if st.button("🗑️ 삭제", key=f"delete_{i}", use_container_width=True, type="secondary"):
-                                    # 삭제 확인은 한 번 더 질문하는 방식으로 진행
-                                    st.warning(f"정말로 답변을 삭제하시겠습니까?", icon="⚠️")
+                                    # 삭제 확인 메시지 표시
+                                    st.warning(f"정말로 답변을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.", icon="⚠️")
                                     col_confirm, col_cancel = st.columns(2)
                                     with col_confirm:
                                         if st.button("✅ 예, 삭제합니다.", key=f"confirm_delete_{i}", use_container_width=True):
                                             del st.session_state.daily_answers[i]
                                             save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
                                             st.toast("🗑️ 답변이 삭제되었습니다.")
+                                            st.session_state.editing_index = -1 # 수정 모드 해제
                                             st.rerun()
                                     with col_cancel:
                                         if st.button("❌ 취소", key=f"cancel_delete_{i}", use_container_width=True):
-                                            st.info("삭제가 취소되었습니다.")
+                                            # 아무 동작도 하지 않거나, 메시지를 지우고 싶다면 다시 렌더링
+                                            st.session_state.editing_index = -1 # 수정 모드 해제
                                             st.rerun()
 
 
