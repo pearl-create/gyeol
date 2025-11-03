@@ -1,17 +1,15 @@
 # [Streamlit UI 및 기본 데이터 처리]
 streamlit==1.39.0
-pandas==2.2.2
+pandas               # 버전 제거
 scikit-learn==1.5.2
 numpy==1.26.4
 
 # [TFLite 모델 실행 및 오디오 처리]
-# 버전 명시 제거
-tflite-support 
+tflite-support       # 버전 제거
 librosa 
 
 # [실시간 마이크 입력 (WebRTC)]
 streamlit-webrtc
-# aiortc 및 av 버전 제거 (자동 최신 호환 버전 설치 유도)
 aiortc
 av
 pydub
