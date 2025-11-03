@@ -390,12 +390,12 @@ def show_daily_question():
         
         /* 2. 말풍선 컨테이너 (st.container) 스타일링 */
         .bubble-container {{
-            position: relative; 
+            position: relative; /* 자식 요소 절대 위치의 기준 */
             background: #ffffff; 
             border-radius: 1.5em; 
             padding: 20px;
+            padding-bottom: 50px; /* 아이콘 버튼 공간 확보 */
             min-height: 100px; /* 최소 높이 설정 */
-            /* 상단과의 간격 확보 */
             margin: 8px 0 5px 0; 
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
             transition: all 0.2s ease-in-out;
@@ -423,31 +423,45 @@ def show_daily_question():
             text-shadow: none;
         }}
 
-        /* 5. 수정/삭제 버튼 가시성 및 디자인 개선 */
-        /* 아이콘 버튼을 위한 작은 크기 조정 */
-        div[data-testid^="stColumn"] > div > div > button {{
-            padding: 0;
-            width: 30px; /* 버튼 너비 */
-            height: 30px; /* 버튼 높이 */
-            border-radius: 50%;
-            background-color: #f0f0f0; /* 배경색 밝게 변경 */
-            border: 1px solid #ccc;
-            color: #4A148C !important; /* 아이콘 색상을 진한 보라색으로 변경 */
-            font-size: 1.1em; /* 아이콘 크기 약간 키움 */
+        /* 5. 수정/삭제 아이콘 버튼 스타일링 (흰색 네모 제거 및 위치 조정) */
+        /* Streamlit 버튼의 기본 배경/테두리 제거 및 아이콘만 남기기 */
+        div[data-testid^="stColumn"] > div > div > button[kind="secondary"] {{
+            background-color: transparent !important; /* 배경 투명 */
+            border: none !important; /* 테두리 제거 */
+            box-shadow: none !important; /* 그림자 제거 */
+            color: #8A2BE2 !important; /* 아이콘 색상 (보라색 계열) */
+            font-size: 1.3em; /* 아이콘 크기 약간 키움 */
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 2px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* 그림자 추가 */
+            padding: 5px; /* 클릭 영역 확보 */
+            position: absolute; /* 절대 위치 */
+            
+            /* 마우스를 올렸을 때 나타나는 효과 */
+            transition: all 0.2s ease-in-out;
+            opacity: 0.7; /* 평소에는 살짝 투명하게 */
         }}
         
-        /* 아이콘 버튼 위에 마우스 올렸을 때 스타일 */
-        div[data-testid^="stColumn"] > div > div > button:hover {{
-            background-color: #e0e0e0;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            transform: translateY(-1px);
+        div[data-testid^="stColumn"] > div > div > button[kind="secondary"]:hover {{
+            color: #FF69B4 !important; /* 호버 시 색상 변경 (핫핑크) */
+            background-color: transparent !important;
+            opacity: 1; /* 호버 시 불투명하게 */
+            transform: scale(1.1); /* 호버 시 약간 확대 */
+            box-shadow: none !important;
         }}
         
+        /* 개별 아이콘 버튼 위치 조정 */
+        /* 수정 아이콘 */
+        button[key^="edit_btn_"] {{
+            bottom: 15px; /* 하단에서 15px 위로 */
+            right: 50px; /* 오른쪽에서 50px 안쪽으로 */
+        }}
+        /* 삭제 아이콘 */
+        button[key^="delete_btn_"] {{
+            bottom: 15px; /* 하단에서 15px 위로 */
+            right: 15px; /* 오른쪽에서 15px 안쪽으로 */
+        }}
+
         </style>
     """, unsafe_allow_html=True)
 
@@ -469,38 +483,17 @@ def show_daily_question():
                 # ------------------- 📌 중요: 소유자 체크 --------------------
                 is_owner = (ans['name'] == current_name)
                 
-                # ------------------- 이름, 나이대, 아이콘 표시 영역 -------------------
-                # 10:1:1 비율로 이름/정보와 수정/삭제 버튼 배치
-                col_info, col_edit, col_delete = st.columns([10, 1, 1])
+                # ------------------- 이름, 나이대 정보 표시 -------------------
+                st.markdown(
+                    f"""
+                    <div style="font-size: 1em; font-weight: bold; color: #FFFFFF; padding-bottom: 8px;">
+                        [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
                 
-                with col_info:
-                    # 답변 제목 영역 (상단 보라색 영역)
-                    st.markdown(
-                        f"""
-                        <div style="font-size: 1em; font-weight: bold; color: #FFFFFF; padding-bottom: 8px;">
-                            [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
-                        </div>
-                        """, 
-                        unsafe_allow_html=True
-                    )
-                
-                # ---------------------- 수정/삭제 버튼 (소유자에게만) ----------------------
-                if is_owner and st.session_state.editing_index != i and st.session_state.confirming_delete_index != i:
-                    with col_edit:
-                        # 수정 버튼
-                        if st.button("✏️", key=f"edit_btn_{i}", help="답변 수정", use_container_width=True):
-                            st.session_state.editing_index = i
-                            st.session_state.confirming_delete_index = -1
-                            st.rerun()
-
-                    with col_delete:
-                        # 삭제 버튼
-                        if st.button("🗑️", key=f"delete_btn_{i}", help="답변 삭제", use_container_width=True):
-                            st.session_state.confirming_delete_index = i
-                            st.session_state.editing_index = -1
-                            st.rerun()
-                
-                # ---------------------- 수정 모드 --------------------------
+                # ---------------------- 수정/삭제/일반 표시 모드 ----------------------
                 if st.session_state.editing_index == i:
                     # 수정 모드일 때는 일반 말풍선 대신 수정 폼을 표시합니다.
                     with st.form(f"edit_form_{i}", clear_on_submit=False):
@@ -525,7 +518,6 @@ def show_daily_question():
                                 st.session_state.confirming_delete_index = -1
                                 st.rerun()
                 
-                # ---------------------- 삭제 확인 모드 --------------------------
                 elif st.session_state.confirming_delete_index == i:
                     # 삭제 확인 메시지 표시
                     st.warning(f"정말로 답변을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.", icon="⚠️")
@@ -543,7 +535,6 @@ def show_daily_question():
                             st.session_state.confirming_delete_index = -1 # 삭제 상태 해제
                             st.rerun()
                 
-                # ---------------------- 일반 표시 모드 --------------------------
                 else:
                     # 답변 텍스트 버블 표시
                     st.markdown(
@@ -556,6 +547,29 @@ def show_daily_question():
                         """,
                         unsafe_allow_html=True
                     )
+                    
+                    # ---------------------- 수정/삭제 아이콘 버튼 (소유자에게만) ----------------------
+                    if is_owner:
+                        # Streamlit의 컬럼 레이아웃을 사용하지 않고, CSS로 직접 위치를 제어합니다.
+                        # 버튼을 markdown으로 직접 삽입하여 CSS 적용을 용이하게 합니다.
+                        st.markdown(
+                            f"""
+                            <button key="edit_btn_{i}" class="stButton stButton--secondary" 
+                                style="position: absolute; bottom: 15px; right: 50px;" 
+                                onclick="document.querySelector('button[key=edit_btn_{i}]').click()">
+                                ✏️
+                            </button>
+                            <button key="delete_btn_{i}" class="stButton stButton--secondary" 
+                                style="position: absolute; bottom: 15px; right: 15px;" 
+                                onclick="document.querySelector('button[key=delete_btn_{i}]').click()">
+                                🗑️
+                            </button>
+                            """, 
+                            unsafe_allow_html=True
+                        )
+                        # 실제 Streamlit 버튼을 숨겨서 클릭 이벤트를 트리거합니다.
+                        st.button("✏️", key=f"edit_btn_{i}", help="답변 수정", use_container_width=False, type="secondary", disabled=True)
+                        st.button("🗑️", key=f"delete_btn_{i}", help="답변 삭제", use_container_width=False, type="secondary", disabled=True)
 
 
     st.divider()
