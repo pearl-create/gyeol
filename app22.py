@@ -197,6 +197,146 @@ def recommend_mentors(search_field, search_topic, search_style):
 
 # --- 4. 인증/회원가입/UI 함수 정의 ---
 
+# 멘토 찾기 페이지에만 적용되는 CSS를 포함하여 렌더링하는 함수
+def show_mentor_search_and_connect():
+    """멘토 검색 및 연결 기능을 표시합니다."""
+    
+    # 멘토 찾기 페이지 전용 CSS 스타일
+    # 전체 앱 배경은 그대로 두고, 이 페이지의 메인 콘텐츠 영역에만 배경 패턴 적용
+    st.markdown("""
+        <style>
+        /* 멘토 찾기 페이지 전용 배경 (어두운 푸른색 기하학적 패턴) */
+        /* 이 CSS는 해당 함수가 호출될 때 적용되며, .main 영역에 영향을 줍니다. */
+        /* stApp 배경은 그대로 유지 */
+        
+        /* 멘토 찾기 페이지 전용 스타일 */
+        [data-testid="stVerticalBlock"] > div:nth-child(1) {
+            background: linear-gradient(135deg, #0077B6 0%, #0096C7 100%);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            /* 기하학적 패턴 (선택 사항) */
+            /* background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cdefs%3E%3Cpattern id='p' width='10' height='10' patternUnits='userSpaceOnUse'%3E%3Cpath d='M0 0h10v10H0z' fill-opacity='0.1' fill='%23FFFFFF'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23p)'/%3E%3C/svg%3E"); */
+        }
+        
+        /* 검색 폼 배경을 흰색으로 만들어 가독성 확보 */
+        div[data-testid="stForm"] {
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* 멘토 카드 컨테이너 스타일 */
+        .stContainer {
+            background-color: #f7f9fc !important; /* 연한 배경 */
+            border-left: 5px solid #0077B6 !important; /* 포인트 색상 */
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease;
+        }
+        .stContainer:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 멘토 찾기 섹션의 모든 텍스트 색상을 대비되게 흰색으로 설정 */
+        div.stVerticalBlock > div:nth-child(1) h1,
+        div.stVerticalBlock > div:nth-child(1) h2,
+        div.stVerticalBlock > div:nth-child(1) h3,
+        div.stVerticalBlock > div:nth-child(1) h4,
+        div.stVerticalBlock > div:nth-child(1) label,
+        div.stVerticalBlock > div:nth-child(1) .stMarkdown {
+            color: #1F2937 !important; /* 기본 텍스트는 짙은 색으로 유지하여 가독성 확보 */
+            text-shadow: none;
+        }
+
+        /* 멘토 카드 내 텍스트는 흰색 배경 위에 있으므로 어두운 색 유지 */
+        .stContainer h4, .stContainer p, .stContainer strong, .stContainer em {
+            color: #333333 !important;
+        }
+
+        </style>
+    """, unsafe_allow_html=True) # 위험: st.markdown을 사용하여 Streamlit의 DOM에 CSS를 삽입
+
+    mentors = st.session_state.mentors_df
+
+    # --- 검색 조건 입력 ---
+    st.header("🔍 멘토 찾기")
+    st.subheader("나에게 맞는 멘토 검색하기")
+
+    with st.form("mentor_search_form"):
+        col_f, col_t, col_s = st.columns(3)
+
+        available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
+
+        # 'style' 컬럼을 사용하도록 가정하고, 해당 컬럼의 고유값을 스타일 옵션으로 사용
+        if 'style' in mentors.columns:
+            available_styles = sorted(list(mentors['style'].dropna().unique()))
+        else:
+            available_styles = sorted(list(COMM_STYLES.keys())) # fallback
+
+        available_fields_clean = sorted(OCCUPATION_GROUPS)
+
+        with col_f:
+            search_field = st.selectbox("💼 전문 분야 (직종 분류)", options=['(전체)'] + available_fields_clean)
+
+        with col_t:
+            search_topic = st.selectbox("💬 주요 대화 주제", options=['(전체)'] + available_topics)
+
+        with col_s:
+            search_style = st.selectbox("🗣️ 선호 대화 스타일", options=['(전체)'] + available_styles)
+
+        submitted = st.form_submit_button("🔎 검색 시작", type="primary")
+
+    if submitted:
+        field = search_field if search_field != '(전체)' else ''
+        topic = search_topic if search_topic != '(전체)' else ''
+        style = search_style if search_style != '(전체)' else ''
+
+        with st.spinner("최적의 멘토를 찾는 중..."):
+            recommendation_results = recommend_mentors(field, topic, style)
+            st.session_state.recommendations = recommendation_results
+
+        if recommendation_results.empty and (field or topic or style):
+            st.info("⚠️ 선택하신 조건에 맞는 멘토를 찾지 못했습니다. 조건을 변경해 보세요.")
+        elif recommendation_results.empty:
+            st.info("멘토 데이터가 비어있습니다. 데이터를 확인해 주세요.")
+
+    # --- 검색 결과 표시 ---
+    if not st.session_state.recommendations.empty:
+        st.subheader(f"총 {len(st.session_state.recommendations)}명의 멘토가 검색되었습니다.")
+        if 'score' in st.session_state.recommendations.columns:
+            st.caption("(추천 점수 또는 이름순)")
+
+        for index, row in st.session_state.recommendations.iterrows():
+            with st.container(border=True):
+                col_name, col_score = st.columns([3, 1])
+                with col_name:
+                    st.markdown(f"#### 👤 {row['name']} ({row['age_band']})")
+                col_m1, col_m2, col_m3 = st.columns(3)
+                with col_m1:
+                    st.markdown(f"**전문 분야:** {row['occupation_major']}")
+                with col_m2:
+                    st.markdown(f"**주요 주제:** {row['topic_prefs']}")
+                with col_m3:
+                    # 'style' 컬럼 값 출력 가정
+                    st.markdown(f"**소통 스타일:** {row['style']}")
+
+                st.markdown(f"**멘토 한마디:** _{row['intro']}_")
+
+                connect_button_key = f"connect_btn_{row['name']}_{index}"
+                if st.button("🔗 연결", key=connect_button_key, type="secondary"): # 버튼 색상 변경
+                    st.session_state.connecting = True
+                    st.session_state.connect_mentor_name = row['name']
+                    st.rerun()
+
+    elif not submitted:
+        st.info("검색 조건을 입력하고 '🔎 검색 시작' 버튼을 눌러 멘토를 찾아보세요.")
+
+
 def show_login_form():
     """로그인 폼을 표시합니다."""
     st.header("🔑 로그인")
@@ -204,7 +344,7 @@ def show_login_form():
     with st.form("login_form"):
         name = st.text_input("이름을 입력하세요 (가입 시 사용한 이름)", placeholder="홍길동")
 
-        submitted = st.form_submit_button("로그인")
+        submitted = st.form_submit_button("로그인", type="primary")
 
         if submitted:
             if not name:
@@ -254,7 +394,7 @@ def show_registration_form():
         )
         selected_style = selected_style_full.split(':')[0]
 
-        submitted = st.form_submit_button("가입 완료 및 서비스 시작")
+        submitted = st.form_submit_button("가입 완료 및 서비스 시작", type="primary")
 
         if submitted:
             if not name or not available_days or not available_times or not selected_topics or not selected_style:
@@ -284,84 +424,6 @@ def show_registration_form():
                 st.success(f"🎉 {name}님, 성공적으로 가입 및 로그인되었습니다!")
                 st.rerun()
 
-def show_mentor_search_and_connect():
-    """멘토 검색 및 연결 기능을 표시합니다."""
-    st.header("🔍 멘토 찾기 및 연결")
-
-    mentors = st.session_state.mentors_df
-
-    # --- 검색 조건 입력 ---
-    st.subheader("나에게 맞는 멘토 검색하기")
-
-    with st.form("mentor_search_form"):
-        col_f, col_t, col_s = st.columns(3)
-
-        available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
-
-        # 'style' 컬럼을 사용하도록 가정하고, 해당 컬럼의 고유값을 스타일 옵션으로 사용
-        if 'style' in mentors.columns:
-            available_styles = sorted(list(mentors['style'].dropna().unique()))
-        else:
-            available_styles = sorted(list(COMM_STYLES.keys())) # fallback
-
-        available_fields_clean = sorted(OCCUPATION_GROUPS)
-
-        with col_f:
-            search_field = st.selectbox("💼 전문 분야 (직종 분류)", options=['(전체)'] + available_fields_clean)
-
-        with col_t:
-            search_topic = st.selectbox("💬 주요 대화 주제", options=['(전체)'] + available_topics)
-
-        with col_s:
-            search_style = st.selectbox("🗣️ 선호 대화 스타일", options=['(전체)'] + available_styles)
-
-        submitted = st.form_submit_button("🔎 검색 시작")
-
-    if submitted:
-        field = search_field if search_field != '(전체)' else ''
-        topic = search_topic if search_topic != '(전체)' else ''
-        style = search_style if search_style != '(전체)' else ''
-
-        with st.spinner("최적의 멘토를 찾는 중..."):
-            recommendation_results = recommend_mentors(field, topic, style)
-            st.session_state.recommendations = recommendation_results
-
-        if recommendation_results.empty and (field or topic or style):
-            st.info("⚠️ 선택하신 조건에 맞는 멘토를 찾지 못했습니다. 조건을 변경해 보세요.")
-        elif recommendation_results.empty:
-            st.info("멘토 데이터가 비어있습니다. 데이터를 확인해 주세요.")
-
-    # --- 검색 결과 표시 ---
-    if not st.session_state.recommendations.empty:
-        st.subheader(f"총 {len(st.session_state.recommendations)}명의 멘토가 검색되었습니다.")
-        if 'score' in st.session_state.recommendations.columns:
-            st.caption("(추천 점수 또는 이름순)")
-
-        for index, row in st.session_state.recommendations.iterrows():
-            with st.container(border=True):
-                col_name, col_score = st.columns([3, 1])
-                with col_name:
-                    st.markdown(f"#### 👤 {row['name']} ({row['age_band']})")
-                col_m1, col_m2, col_m3 = st.columns(3)
-                with col_m1:
-                    st.markdown(f"**전문 분야:** {row['occupation_major']}")
-                with col_m2:
-                    st.markdown(f"**주요 주제:** {row['topic_prefs']}")
-                with col_m3:
-                    # 'style' 컬럼 값 출력 가정
-                    st.markdown(f"**소통 스타일:** {row['style']}")
-
-                st.markdown(f"**멘토 한마디:** _{row['intro']}_")
-
-                connect_button_key = f"connect_btn_{row['name']}_{index}"
-                if st.button("🔗 연결", key=connect_button_key):
-                    st.session_state.connecting = True
-                    st.session_state.connect_mentor_name = row['name']
-                    st.rerun()
-
-    elif not submitted:
-        st.info("검색 조건을 입력하고 '🔎 검색 시작' 버튼을 눌러 멘토를 찾아보세요.")
-
 
 def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
@@ -370,7 +432,7 @@ def show_daily_question():
     # 새로고침 시 파일 최신 상태로 반영
     st.session_state.daily_answers = load_json_data(ANSWERS_FILE_PATH, st.session_state.get("daily_answers", []))
 
-    # 📌 배경색 및 버블 스타일 CSS 적용
+    # 📌 배경색 및 버블 스타일 CSS 적용 (전체 앱 CSS 재적용)
     st.markdown("""
         <style>
         /* 앱 전체 배경 (은은한 노랑-민트 그라데이션) */
@@ -587,6 +649,51 @@ def main():
         st.title("👵👴 플랫폼 준비 중 🧑‍💻")
         st.error(f"⚠️ 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 로드하지 못했습니다. 파일을 확인해 주세요.")
         st.stop()
+
+    # --- 전체 앱 CSS (멘토 찾기 외 페이지에 기본 적용) ---
+    st.markdown("""
+        <style>
+        /* 앱 전체 배경 (은은한 노랑-민트 그라데이션) - 기본 설정 유지 */
+        .stApp {
+            background: linear-gradient(135deg, #FFD700 0%, #00FFFF 100%); 
+            background-attachment: fixed;
+        }
+
+        /* 사이드바 배경 (짙은 파랑 계열로 대비) - 기본 설정 유지 */
+        [data-testid="stSidebar"] {
+            background-color: #004D7A !important; 
+            background-image: none !important;
+        }
+
+        /* 메인 콘텐츠 영역 텍스트 색상 (짙은 색으로 가독성 확보) - 기본 설정 유지 */
+        h1, h2, h3, h4, h5, h6, 
+        .stMarkdown, .stSubheader, label, 
+        div[data-testid^="stAlert"] * {
+            color: #1F2937 !important; /* Tailwind CSS gray-800 */
+            text-shadow: none; 
+        }
+        
+        /* 사이드바 텍스트 색상 (흰색으로 유지) - 기본 설정 유지 */
+        div[data-testid="stSidebarContent"] * {
+            color: #FFFFFF !important;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        /* 폼/텍스트 영역 배경색 흰색으로 (가독성 확보) */
+        div[data-testid="stForm"], div[data-testid="stTextArea"] > div:first-child {
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        /* 버튼 기본 스타일 조정 */
+        div[data-testid^="stColumn"] > div > div > button {
+             border-radius: 8px !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
 
     # --- 연결 프로세스 처리 ---
     if st.session_state.get('connecting'):
