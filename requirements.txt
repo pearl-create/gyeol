@@ -7,9 +7,3 @@ numpy==1.26.4
 # [TFLite 모델 실행 및 오디오 처리]
 tflite-support       # 버전 제거
 librosa 
-
-# [실시간 마이크 입력 (WebRTC)]
-streamlit-webrtc
-aiortc
-av
-pydub
