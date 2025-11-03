@@ -384,8 +384,18 @@ def show_daily_question():
              color: #EEEEEE !important;
         }}
         /* 사이드바 텍스트 색상 */
+        /* '멘토 찾기'와 '오늘의 질문' 라디오 버튼을 제외한 모든 메뉴 글자를 검은색으로 변경 요청 */
         .css-vk3ghm, .css-1dp54x6, .css-1aumw6k {{
-            color: #FFFFFF !important;
+            color: #000000 !important; /* 검은색으로 변경 */
+            text-shadow: none !important; /* 검은색이므로 그림자 제거 */
+        }}
+        /* 라디오 버튼 텍스트 색상만 흰색으로 다시 지정하여 '멘토 찾기'와 '오늘의 질문'이 잘 보이도록 유지 */
+        /* 이 선택자는 stSidebarContent 내부의 stRadio의 라벨과 내용을 타겟팅합니다. */
+        div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label,
+        div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label span,
+        div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label div {{
+             color: #FFFFFF !important;
+             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
         }}
         
         /* 2. 말풍선 컨테이너 (st.container) 스타일링 */
