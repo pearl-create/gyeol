@@ -2,97 +2,76 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>비속어 감지 화상 통화 (양분 화면)</title>
+  <title>비속어 감지 화상 통화 (두 창 분할 실행)</title>
   <style>
     body {
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      font-family: 'Segoe UI', sans-serif;
       background-color: #111;
       color: white;
-    }
-    /* 왼쪽: 화상 통화 */
-    .left {
-      flex: 1;
-      background: #000;
+      font-family: "Segoe UI", sans-serif;
       display: flex;
-      flex-direction: column;
-      align-items: center;
       justify-content: center;
-      position: relative;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
     }
     video {
-      width: 90%;
-      max-height: 70%;
+      width: 400px;
+      height: 300px;
       border-radius: 16px;
+      border: 2px solid #333;
+      background: #000;
       object-fit: cover;
-      border: 2px solid #444;
-      box-shadow: 0 0 12px rgba(0,0,0,0.4);
     }
     .controls {
-      margin-top: 20px;
+      margin-top: 16px;
       display: flex;
       gap: 12px;
     }
     button {
-      background: #2c2c2c;
-      color: #fff;
+      background: #333;
+      color: white;
       border: none;
       border-radius: 8px;
       padding: 10px 18px;
-      font-size: 15px;
       cursor: pointer;
-      transition: background 0.3s;
+      font-size: 15px;
     }
     button:hover {
-      background: #3e3e3e;
+      background: #444;
     }
     .muted {
       background: #b52d2d;
     }
-
-    /* 오른쪽: Teachable Machine */
-    .right {
-      flex: 1;
-      border-left: 2px solid #222;
-    }
-    iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
   </style>
 </head>
 <body>
-  <div class="left">
-    <video id="video" autoplay playsinline muted></video>
-    <div class="controls">
-      <button id="camBtn">📷 카메라 켜기</button>
-      <button id="micBtn">🎤 마이크 켜기</button>
-    </div>
-  </div>
-  <div class="right">
-    <iframe src="https://teachablemachine.withgoogle.com/models/gSHOySjax/"></iframe>
+  <h2>🎥 화상 통화 데모</h2>
+  <video id="video" autoplay playsinline muted></video>
+  <div class="controls">
+    <button id="camBtn">📷 카메라 켜기</button>
+    <button id="micBtn">🎤 마이크 켜기</button>
+    <button id="openBtn">🧠 Teachable Machine 열기</button>
   </div>
 
   <script>
     const video = document.getElementById('video');
     const camBtn = document.getElementById('camBtn');
     const micBtn = document.getElementById('micBtn');
+    const openBtn = document.getElementById('openBtn');
     let stream = null;
-    let micOn = false;
     let camOn = false;
+    let micOn = false;
 
+    // 카메라 토글
     camBtn.addEventListener('click', async () => {
       if (!camOn) {
         try {
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: micOn });
           video.srcObject = stream;
           camOn = true;
-          camBtn.textContent = '📷 카메라 끄기';
-        } catch (err) {
-          alert('카메라 접근 실패: ' + err.message);
+          camBtn.textContent = "📷 카메라 끄기";
+        } catch (e) {
+          alert("카메라 접근 실패: " + e.message);
         }
       } else {
         if (stream) {
@@ -100,20 +79,28 @@
           video.srcObject = null;
         }
         camOn = false;
-        camBtn.textContent = '📷 카메라 켜기';
+        camBtn.textContent = "📷 카메라 켜기";
       }
     });
 
+    // 마이크 토글
     micBtn.addEventListener('click', async () => {
       micOn = !micOn;
-      micBtn.textContent = micOn ? '🔇 음소거' : '🎤 마이크 켜기';
-      micBtn.classList.toggle('muted', micOn);
+      micBtn.textContent = micOn ? "🔇 음소거" : "🎤 마이크 켜기";
+      micBtn.classList.toggle("muted", micOn);
       if (camOn) {
-        // 이미 카메라 스트림이 있다면 트랙 다시 요청
         stream.getTracks().forEach(t => t.stop());
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: micOn });
         video.srcObject = stream;
       }
+    });
+
+    // 새 창으로 TM 링크 열기
+    openBtn.addEventListener('click', () => {
+      const url = "https://teachablemachine.withgoogle.com/models/gSHOySjax/";
+      const w = screen.width / 2;
+      const h = screen.height;
+      window.open(url, "_blank", `width=${w},height=${h},left=${w},top=0`);
     });
   </script>
 </body>
