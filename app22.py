@@ -3,8 +3,7 @@ import pandas as pd
 import random
 import time
 import os
-import json 
-
+import json # <--- 이 줄을 깨끗하게 다시 타이핑합니다.
 # --- 1. 데이터 로드 및 상수 정의 (변경 없음) ---
 
 MENTOR_CSV_PATH = "멘토더미.csv"
