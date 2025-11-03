@@ -21,7 +21,7 @@ WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
 TIMES = ["오전", "오후", "저녁"]
 AGE_BANDS = [
     "만 13세~19세", "만 20세~29세", "만 30세~39세",
-    "만 40세~49세", "만 50세~59세", # 50-59세 수정
+    "만 40세~49세", "만 50세~59세", 
     "만 60세~69세",
     "만 70세~79세", "만 80세~89세", "만 90세 이상"
 ]
@@ -197,21 +197,17 @@ def recommend_mentors(search_field, search_topic, search_style):
 
 # --- 4. 인증/회원가입/UI 함수 정의 ---
 
-# 멘토 찾기 페이지에만 적용되는 CSS를 포함하여 렌더링하는 함수
 def show_mentor_search_and_connect():
     """멘토 검색 및 연결 기능을 표시합니다."""
     
-    # 멘토 찾기 페이지 전용 CSS 스타일
-    # 전체 앱 배경은 그대로 두고, 이 페이지의 메인 콘텐츠 영역에만 배경 패턴 적용
+    # 멘토 찾기 페이지 전용 CSS 스타일 (블루 계열)
     st.markdown("""
         <style>
-        /* 멘토 찾기 페이지 전용 배경 (따뜻한 오렌지-골드 그라데이션) */
-        /* 이 CSS는 해당 함수가 호출될 때 적용되며, .main 영역에 영향을 줍니다. */
-        
-        /* 멘토 찾기 페이지 전용 스타일 */
+        /* 멘토 찾기 페이지 전용 배경 (시원한 블루 계열) */
+        /* 전체 앱 배경은 노랑-민트지만, 이 영역에만 별도 배경 적용 */
         [data-testid="stVerticalBlock"] > div:nth-child(1) {
-            /* 따뜻하고 편안한 오렌지/골드 그라데이션 적용 */
-            background: linear-gradient(135deg, #FFD700 0%, #FFA07A 100%); 
+            /* 시원하고 깔끔한 블루/화이트 그라데이션 적용 */
+            background: linear-gradient(135deg, #ADD8E6 0%, #B0E0E6 100%); 
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -228,8 +224,8 @@ def show_mentor_search_and_connect():
         /* 멘토 카드 컨테이너 스타일 */
         .stContainer {
             background-color: #f7f9fc !important; /* 연한 배경 */
-            /* 포인트 색상을 따뜻한 오렌지 계열로 변경 */
-            border-left: 5px solid #FF9800 !important; 
+            /* 포인트 색상을 시원한 파랑 계열로 변경 */
+            border-left: 5px solid #1E90FF !important; 
             border-radius: 8px;
             padding: 15px;
             margin-bottom: 15px;
@@ -258,7 +254,7 @@ def show_mentor_search_and_connect():
         }
 
         </style>
-    """, unsafe_allow_html=True) # 위험: st.markdown을 사용하여 Streamlit의 DOM에 CSS를 삽입
+    """, unsafe_allow_html=True) 
 
     mentors = st.session_state.mentors_df
 
@@ -327,7 +323,8 @@ def show_mentor_search_and_connect():
                 st.markdown(f"**멘토 한마디:** _{row['intro']}_")
 
                 connect_button_key = f"connect_btn_{row['name']}_{index}"
-                if st.button("🔗 연결", key=connect_button_key, type="secondary"): # 버튼 색상 변경
+                # 버튼 색상을 primary(파란색) 계열로 유지
+                if st.button("🔗 연결", key=connect_button_key, type="primary"): 
                     st.session_state.connecting = True
                     st.session_state.connect_mentor_name = row['name']
                     st.rerun()
@@ -430,86 +427,8 @@ def show_daily_question():
 
     # 새로고침 시 파일 최신 상태로 반영
     st.session_state.daily_answers = load_json_data(ANSWERS_FILE_PATH, st.session_state.get("daily_answers", []))
-
-    # 📌 배경색 및 버블 스타일 CSS 적용 (전체 앱 CSS 재적용)
-    st.markdown("""
-        <style>
-        /* 앱 전체 배경 (은은한 노랑-민트 그라데이션) */
-        .stApp {
-            background: linear-gradient(135deg, #FFD700 0%, #00FFFF 100%); 
-            background-attachment: fixed;
-        }
-
-        /* 사이드바 배경 (짙은 파랑 계열로 대비) */
-        [data-testid="stSidebar"] {
-            background-color: #004D7A !important; 
-            background-image: none !important;
-        }
-
-        /* 메인 콘텐츠 영역 텍스트 색상 (짙은 색으로 가독성 확보) */
-        h1, h2, h3, h4, h5, h6, 
-        /* 일반 텍스트는 흰색 배경 위에 잘 보이도록 짙은 색으로 */
-        .stMarkdown, .stSubheader, label, 
-        div[data-testid^="stAlert"] * {
-            color: #1F2937 !important; /* Tailwind CSS gray-800 */
-            text-shadow: none; /* 그림자 제거 */
-        }
-        
-        /* 사이드바 텍스트 색상 (흰색으로 유지) */
-        div[data-testid="stSidebarContent"] * {
-            color: #FFFFFF !important;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
-        }
-        div[data-testid="stText"] {
-             color: #1F2937 !important;
-        }
-        
-        /* 버블 컨테이너 스타일 (둥근 사각형) */
-        .bubble-container {
-            position: relative; 
-            background: #ffffff; 
-            border-radius: 16px; /* 둥근 사각형 */ 
-            padding: 18px 16px;
-            min-height: 120px; 
-            margin: 8px 0 15px 0; /* Streamlit 버튼 공간 확보 */
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); /* 그림자 부드럽게 */
-            border: 1px solid #e9ecf3;
-            transition: all 0.2s ease;
-        }
-        .bubble-info {
-            font-size: 14px;
-            font-weight: 600;
-            color: #8A2BE2; /* 보라색 계열 */
-            margin-bottom: 8px;
-            border-bottom: 1px solid #e9ecf3;
-            padding-bottom: 5px;
-        }
-        .bubble-answer {
-            font-size: 15px;
-            line-height: 1.6;
-            color: #222;
-            margin: 0;
-        }
-
-        /* 폼/텍스트 영역 배경색 흰색으로 (가독성 확보) */
-        div[data-testid="stForm"], div[data-testid="stTextArea"] > div:first-child {
-            background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 10px;
-            padding: 15px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-        div[data-testid="stForm"] label, div[data-testid="stTextArea"] label {
-            color: #333333 !important; 
-            text-shadow: none;
-        }
-        
-        /* 버튼 스타일 조정 */
-        div[data-testid^="stColumn"] > div > div > button {
-             border-radius: 8px !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
+    
+    # ⭐ 오늘의 질문 페이지의 버블 스타일 CSS는 그대로 유지합니다.
 
     daily_q = "🤔 **'나와 전혀 다른 세대의 삶을 하루만 살아볼 수 있다면, 어떤 세대의 삶을 살아보고 싶은지 이유와 함께 알려주세요!'**"
     st.subheader(daily_q)
@@ -649,22 +568,22 @@ def main():
         st.error(f"⚠️ 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 로드하지 못했습니다. 파일을 확인해 주세요.")
         st.stop()
 
-    # --- 전체 앱 CSS (멘토 찾기 외 페이지에 기본 적용) ---
+    # --- 전체 앱 CSS (노랑-민트 그라데이션) ---
     st.markdown("""
         <style>
-        /* 앱 전체 배경 (은은한 노랑-민트 그라데이션) - 기본 설정 유지 */
+        /* 앱 전체 배경 (은은한 노랑-민트 그라데이션) */
         .stApp {
             background: linear-gradient(135deg, #FFD700 0%, #00FFFF 100%); 
             background-attachment: fixed;
         }
 
-        /* 사이드바 배경 (짙은 파랑 계열로 대비) - 기본 설정 유지 */
+        /* 사이드바 배경 (짙은 파랑 계열로 대비) */
         [data-testid="stSidebar"] {
             background-color: #004D7A !important; 
             background-image: none !important;
         }
 
-        /* 메인 콘텐츠 영역 텍스트 색상 (짙은 색으로 가독성 확보) - 기본 설정 유지 */
+        /* 메인 콘텐츠 영역 텍스트 색상 (짙은 색으로 가독성 확보) */
         h1, h2, h3, h4, h5, h6, 
         .stMarkdown, .stSubheader, label, 
         div[data-testid^="stAlert"] * {
@@ -672,10 +591,37 @@ def main():
             text-shadow: none; 
         }
         
-        /* 사이드바 텍스트 색상 (흰색으로 유지) - 기본 설정 유지 */
+        /* 사이드바 텍스트 색상 (흰색으로 유지) */
         div[data-testid="stSidebarContent"] * {
             color: #FFFFFF !important;
             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        /* 버블 텍스트 (오늘의 질문) */
+        .bubble-container {
+            position: relative; 
+            background: #ffffff; 
+            border-radius: 16px; /* 둥근 사각형 */ 
+            padding: 18px 16px;
+            min-height: 120px; 
+            margin: 8px 0 15px 0; 
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); 
+            border: 1px solid #e9ecf3;
+            transition: all 0.2s ease;
+        }
+        .bubble-info {
+            font-size: 14px;
+            font-weight: 600;
+            color: #8A2BE2; /* 보라색 계열 */
+            margin-bottom: 8px;
+            border-bottom: 1px solid #e9ecf3;
+            padding-bottom: 5px;
+        }
+        .bubble-answer {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #222;
+            margin: 0;
         }
         
         /* 폼/텍스트 영역 배경색 흰색으로 (가독성 확보) */
@@ -723,8 +669,9 @@ def main():
 
     # --- 메인 페이지 흐름 제어 ---
     st.sidebar.title("메뉴")
-
-    st.title("👵👴 결(멘티용)🧑‍💻")
+    
+    # ⭐ 제목 위의 노란색 박스 제거 (이전 버전에 있던 st.markdown 주석 처리 또는 제거)
+    st.title("👵👴 결(멘티용)🧑‍💻") 
 
     if not st.session_state.logged_in:
         # 로그인/회원가입 선택
@@ -755,6 +702,8 @@ def main():
         if page == "멘토 찾기":
             show_mentor_search_and_connect()
         elif page == "오늘의 질문":
+            # 오늘의 질문 페이지는 배경을 앱 전체 CSS에 의존하며,
+            # 버블 스타일만 show_daily_question 함수 내에서 적용됩니다.
             show_daily_question()
 
 if __name__ == "__main__":
