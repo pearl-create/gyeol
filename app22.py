@@ -561,8 +561,7 @@ def show_daily_question():
                 
                 else:
                     # 답변 텍스트 버블 표시
-                    st.markdown(
-                        f"""
+                    answer_display_html = f"""
                         <div class='bubble-container'>
                             <div class='bubble-info'>
                                 [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
@@ -587,9 +586,9 @@ def show_daily_question():
                                 ''' if is_owner else ''
                             }
                         </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                        """
+                    # st.markdown()을 사용하여 HTML 코드를 렌더링
+                    st.markdown(answer_display_html, unsafe_allow_html=True)
                     
                     # ---------------------- 실제 Streamlit 버튼 (숨겨짐) ----------------------
                     if is_owner:
