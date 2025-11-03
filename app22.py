@@ -1,43 +1,58 @@
 def show_daily_question():
-    # ----- 0) 자동 로그인 훅 (쿼리파라미터 → 세션 로그인) -----
-    # 새로고침(F5) 시 세션이 초기화되어도, localStorage에 저장된 이름으로 자동 로그인되도록 함.
-    # ?auto_login=이름 이 붙어 있으면 해당 이름으로 로그인 처리
-    qp = st.query_params if hasattr(st, "query_params") else {}
-    auto_name = None
-    if isinstance(qp, dict) and "auto_login" in qp:
-        auto_name = qp.get("auto_login")
-        # Streamlit 버전에 따라 list/str일 수 있으니 정규화
-        if isinstance(auto_name, list):
-            auto_name = auto_name[0] if auto_name else None
-
-    if (not st.session_state.get("logged_in")) and auto_name:
-        if auto_name in st.session_state.all_users:
-            st.session_state.user_profile = st.session_state.all_users[auto_name]
-            st.session_state.logged_in = True
-            st.rerun()
-
-    # ----- 1) 배경/말풍선 CSS & JS (페이지 내에서만 적용) -----
+    # --- 0) 스타일(CSS)만 사용: 전역이 아닌 래퍼 div에만 적용 ---
     st.markdown("""
         <style>
-            /* 전체 배경에 그라디언트 + 은은한 애니메이션 */
-            html, body, [data-testid="stAppViewContainer"] {
+            /* 섹션 배경을 감싸는 래퍼 */
+            #dq-wrap {
+                position: relative;
+                padding: 16px;
+                border-radius: 16px;
+                overflow: hidden;
+            }
+            #dq-wrap::before {
+                content: "";
+                position: absolute;
+                inset: 0;
                 background: linear-gradient(120deg, #1f1c2c, #928DAB, #355C7D, #6C5B7B, #C06C84);
                 background-size: 400% 400%;
-                animation: bgShift 16s ease infinite;
+                animation: dqBgShift 16s ease infinite;
+                z-index: 0;
+                opacity: 0.35;
             }
-            @keyframes bgShift {
+            @keyframes dqBgShift {
                 0% { background-position: 0% 50%; }
                 50% { background-position: 100% 50%; }
                 100% { background-position: 0% 50%; }
             }
 
-            /* 말풍선 공통 스타일 */
+            .dq-card {
+                position: relative;
+                z-index: 1;
+                background: rgba(0,0,0,0.35);
+                border: 1px solid rgba(255,255,255,0.15);
+                border-radius: 16px;
+                padding: 20px;
+                margin-bottom: 10px;
+                box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+            }
+            .dq-title {
+                color: #fff;
+                text-shadow: 0 1px 8px rgba(0,0,0,0.3);
+            }
+
+            .bubble-box {
+                position: relative;
+                z-index: 1;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                align-items: flex-start;
+            }
             .floating-bubble {
                 position: relative;
                 display: inline-block;
-                max-width: 90%;
+                max-width: min(90%, 560px);
                 padding: 14px 18px;
-                margin: 12px 8px;
                 border-radius: 18px;
                 background: rgba(255,255,255,0.15);
                 backdrop-filter: blur(6px);
@@ -45,6 +60,9 @@ def show_daily_question():
                 color: #F7F7FF;
                 box-shadow: 0 10px 25px rgba(0,0,0,0.15);
                 border: 1px solid rgba(255,255,255,0.25);
+                animation-name: dqFloatY;
+                animation-timing-function: ease-in-out;
+                animation-iteration-count: infinite;
             }
             .floating-bubble:after {
                 content: "";
@@ -55,15 +73,6 @@ def show_daily_question():
                 border-color: rgba(255,255,255,0.15) transparent transparent transparent;
                 filter: drop-shadow(0 -2px 2px rgba(0,0,0,0.05));
             }
-
-            /* 말풍선 둥둥 애니메이션(세부 속성은 inline-style에서 각 풍선별로 다르게) */
-            @keyframes floatUpDown {
-                0%   { transform: translateY(0px); }
-                50%  { transform: translateY(-12px); }
-                100% { transform: translateY(0px); }
-            }
-
-            /* 이름/나이대 라벨 */
             .bubble-header {
                 font-weight: 700;
                 font-size: 0.95rem;
@@ -75,78 +84,54 @@ def show_daily_question():
                 line-height: 1.6;
                 font-size: 0.95rem;
             }
-
-            /* 섹션 카드 느낌 */
-            .dq-card {
-                background: rgba(0,0,0,0.25);
-                border: 1px solid rgba(255,255,255,0.12);
-                border-radius: 16px;
-                padding: 20px;
-                margin-top: 6px;
-                box-shadow: 0 6px 18px rgba(0,0,0,0.25);
-            }
-            .dq-title {
-                color: #fff;
-                text-shadow: 0 1px 8px rgba(0,0,0,0.3);
+            @keyframes dqFloatY {
+                0%   { transform: translateY(0px); }
+                50%  { transform: translateY(-12px); }
+                100% { transform: translateY(0px); }
             }
         </style>
-
-        <script>
-        // 초기 1회: localStorage에 저장된 이름으로 auto_login 쿼리파라미터 부착
-        (function(){
-            try {
-                const params = new URLSearchParams(window.location.search);
-                const hasAuto = params.has('auto_login');
-                const stored = localStorage.getItem('gyeol_user_name');
-                if (!hasAuto && stored) {
-                    // 쿼리파라미터에 auto_login 추가하고 한 번만 새로고침
-                    params.set('auto_login', stored);
-                    const newUrl = window.location.pathname + "?" + params.toString();
-                    window.history.replaceState({}, "", newUrl);
-                    // Streamlit이 쿼리 변경을 감지해서 rerun
-                }
-            } catch(e) {}
-        })();
-        </script>
     """, unsafe_allow_html=True)
 
-    st.header("💬 오늘의 질문: 세대 공감 창구", anchor=False)
+    st.markdown('<div id="dq-wrap">', unsafe_allow_html=True)
+
+    st.header("💬 오늘의 질문: 세대 공감 창구")
     st.markdown('<div class="dq-card">', unsafe_allow_html=True)
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
     daily_q = "🤔 **'나와 전혀 다른 세대의 삶을 하루만 살아볼 수 있다면, 어떤 세대의 삶을 살아보고 싶은지 이유와 함께 알려주세요!'**"
     st.subheader(daily_q)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ----- 2) 답변 리스트 (말풍선으로 둥둥) -----
+    # --- 1) 답변 리스트: 말풍선(순수 CSS) ---
     if st.session_state.daily_answers:
         sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: x['name'], reverse=False)
+        st.markdown('<div class="bubble-box">', unsafe_allow_html=True)
 
-        # 말풍선의 개별 애니메이션 속성(지연/기간/수평오프셋)을 조금씩 다르게
         for i, ans in enumerate(sorted_answers):
-            # 풍선 개별 애니메이션 파라미터
-            delay = (i % 5) * 0.25          # 0, 0.25, 0.5, 0.75, 1.0s
-            duration = 4.0 + (i % 4) * 0.6  # 4.0, 4.6, 5.2, 5.8s
-            xshift = (i % 6) * 6 - 12       # -12, -6, 0, 6, 12, 18 px
+            # 풍선마다 살짝 다른 리듬/지연/수평 오프셋
+            delay = (i % 5) * 0.25          # 0, 0.25, 0.5, 0.75, 1.0
+            duration = 4.0 + (i % 4) * 0.6  # 4.0, 4.6, 5.2, 5.8
+            xshift = (i % 6) * 6 - 12       # -12, -6, 0, 6, 12, 18
 
             header = f"[{ans.get('age_band','-')}] {ans.get('name','익명')}"
             body = ans.get('answer', '')
 
             html = f"""
             <div class="floating-bubble"
-                 style="animation: floatUpDown {duration}s ease-in-out {delay}s infinite;
-                        transform: translateX({xshift}px);">
+                 style="animation-duration:{duration}s; animation-delay:{delay}s; transform: translateX({xshift}px);">
                 <div class="bubble-header">{header}</div>
                 <div class="bubble-body">{body}</div>
             </div>
             """
             st.markdown(html, unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.info("아직 등록된 답변이 없습니다. 첫 번째 답변을 남겨주세요!")
 
     st.divider()
 
-    # ----- 3) 답변 작성 폼 -----
-    st.subheader("나의 답변 작성하기", anchor=False)
+    # --- 2) 답변 작성 폼: 제출 즉시 파일 저장 + rerun 로 즉시 반영 ---
+    st.subheader("나의 답변 작성하기")
     current_name = st.session_state.user_profile.get('name', '익명')
     current_age = st.session_state.user_profile.get('age_band', '미등록')
 
@@ -162,20 +147,10 @@ def show_daily_question():
                     "answer": answer_text
                 }
                 st.session_state.daily_answers.append(new_answer)
-                # 파일에 즉시 반영
                 save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
-
-                # 브라우저에 사용자 이름 저장 → 새로고침 시 자동 로그인 유도
-                st.markdown(f"""
-                    <script>
-                        try {{
-                            localStorage.setItem('gyeol_user_name', {json.dumps(current_name)});
-                        }} catch(e) {{}}
-                    </script>
-                """, unsafe_allow_html=True)
-
-                st.success("답변이 제출되었습니다. 새로고침(F5)해도 바로 반영된 답변을 볼 수 있어요!")
-                # 서버 사이드 즉시 반영도 위해 rerun
+                st.success("답변이 제출되었습니다. 새로고침 없이도 바로 반영됐어요!")
                 st.rerun()
             else:
                 st.warning("답변 내용을 입력해 주세요.")
+
+    st.markdown('</div>', unsafe_allow_html=True)
