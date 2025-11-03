@@ -1,226 +1,114 @@
-# -*- coding: utf-8 -*-
-import streamlit as st
-import streamlit.components.v1 as components
-
-st.set_page_config(page_title="통화 화면 (TM 연결)", layout="centered")
-
-st.title("📞 통화 화면 — Teachable Machine 오디오 모델 연결 데모")
-
-# 👉 Teachable Machine 오디오 모델 URL (끝에 / 포함)
-tm_base_url = st.text_input(
-    "Teachable Machine 모델 URL (마지막에 `/` 포함)",
-    value="https://teachablemachine.withgoogle.com/models/XXXXX/",
-    help="예) https://teachablemachine.withgoogle.com/models/gSHOySjax/"
-)
-
-accent = "#5B8DEF"
-danger = "#E55353"
-ok = "#2EBD85"
-
-html_code = f"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>통화 화면 (TM 연결)</title>
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<style>
-  :root {{
-    --accent: "{accent}";
-    --danger: "{danger}";
-    --ok: "{ok}";
-    --bg: #0f172a;
-    --card: #111827;
-    --muted: #475569;
-    --text: #e5e7eb;
-    --text-dim: #94a3b8;
-    --ring: rgba(91,141,239,0.35);
-  }}
-  * {{ box-sizing: border-box; }}
-  body {{
-    margin: 0;
-    background: radial-gradient(1200px 800px at 50% -200px, #1f2937, var(--bg));
-    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-    color: var(--text);
-  }}
-  .wrap {{
-    max-width: 520px; margin: 24px auto; padding: 12px 16px 28px;
-    background: linear-gradient(180deg, rgba(17,24,39,0.9), rgba(17,24,39,0.75));
-    border: 1px solid #1f2937; border-radius: 18px; box-shadow: 0 8px 40px rgba(0,0,0,.45);
-  }}
-  .topbar {{
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 8px 6px 16px; border-bottom: 1px solid #1f2937;
-  }}
-  .status-dot {{
-    width: 10px; height: 10px; border-radius: 50%;
-    background: #9ca3af; margin-right: 8px; box-shadow: 0 0 0 2px rgba(156,163,175,.2);
-  }}
-  .status.ok {{ background: var(--ok); }}
-  .status.err {{ background: var(--danger); }}
-  .title {{
-    display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:.1px;
-  }}
-  .small {{ color: var(--text-dim); font-size: 12px; }}
-  .avatars {{
-    display:grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 24px 6px 8px;
-  }}
-  .avatar {{
-    background: #0b1220; border: 1px solid #101828; border-radius: 18px; padding: 18px;
-    display:flex; align-items:center; gap:14px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.02);
-  }}
-  .avatar .pic {{
-    width: 56px; height: 56px; border-radius: 50%;
-    background: linear-gradient(135deg, #334155, #0f172a);
-    border: 2px solid #1f2937; box-shadow: 0 0 0 6px rgba(59,130,246,0.05);
-  }}
-  .name {{ font-weight:600; }}
-  .controls {{
-    display:flex; align-items:center; justify-content:center; gap: 14px;
-    padding: 16px 0 6px;
-  }}
-  button {{
-    appearance:none; border:none; cursor:pointer; font-weight:600;
-    padding: 12px 16px; border-radius: 14px; color:#0b1220;
-    background: var(--text); transition: transform .06s ease, box-shadow .2s ease;
-  }}
-  button:hover {{ transform: translateY(-1px); }}
-  .btn-main {{ background: var(--accent); color:#0b1220; box-shadow: 0 10px 30px var(--ring); }}
-  .btn-end  {{ background: var(--danger); color: #fff; }}
-  .btn-mute {{ background: #e5e7eb; }}
-  .meter {{
-    margin-top: 10px; width: 100%; height: 8px; background: #0b1220; border-radius: 8px; overflow: hidden;
-    border: 1px solid #0f172a;
-  }}
-  .fill {{
-    height:100%; width:0%; background: linear-gradient(90deg, var(--accent), #8b5cf6);
-    transition: width .15s ease;
-  }}
-  .panel {{
-    margin-top: 18px; padding: 14px; border-radius: 14px; background: #0b1220; border:1px solid #0f172a;
-  }}
-  .prob {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:6px 0; }}
-  .prob .bar {{
-    flex:1; height:8px; border-radius:10px; background:#0f172a; overflow:hidden;
-  }}
-  .prob .bar > span {{
-    display:block; height:100%; width:0%; background: linear-gradient(90deg,#22c55e,#84cc16);
-    transition: width .12s ease;
-  }}
-  .prob .label {{ min-width: 120px; font-size:13px; color:#cbd5e1; }}
-  .alert {{
-    margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-weight:600;
-    background: rgba(229,83,83,.12); border:1px solid rgba(229,83,83,.35); color:#fecaca;
-    display:none;
-  }}
-  .row {{
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
-  }}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>실시간 비속어 감지 미니 데모</title>
+
+  <!-- p5.js & ml5.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+  <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
+
+  <style>
+    :root { --card-w: 380px; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100svh;
+      display: grid;
+      place-items: center;
+      font-family: system-ui, -apple-system, "Pretendard", "Noto Sans KR", sans-serif;
+      color: #fff;
+      background: url('https://ssl.gstatic.com/meet/backgrounds/hills.jpg') center/cover no-repeat fixed;
+      backdrop-filter: blur(14px);
+    }
+    .glass {
+      width: min(92vw, var(--card-w));
+      padding: 24px 28px;
+      border-radius: 20px;
+      background: rgba(0,0,0,.45);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    h2 { margin: 0 0 6px; font-weight: 700; font-size: 22px; }
+    .hint { opacity: .9; margin: 0 0 16px; font-size: 14px; }
+    .meter { background: rgba(255,255,255,.15); border-radius: 10px; overflow: hidden; height: 22px; margin: 8px 0; }
+    .bar   { height: 100%; width: 0%; background: linear-gradient(90deg,#66d,#aaf); color: #000; font-weight: 700;
+             font-size: 13px; padding-left: 8px; line-height: 22px; white-space: nowrap; }
+    .row { display: grid; grid-template-columns: 1fr; gap: 4px; }
+    .footer { margin-top: 12px; font-size: 12px; opacity: .8; }
+    button {
+      margin-top: 10px; width: 100%; height: 40px; border-radius: 10px; border: none; cursor: pointer;
+      font-weight: 700;
+    }
+  </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="topbar">
-    <div class="title">
-      <span class="status-dot" id="statusDot"></span>
-      <span>통화 연결</span>
-      <span class="small" id="tmStatus">모델 준비 중…</span>
-    </div>
-    <div class="small" id="timer">00:00</div>
-  </div>
+  <main class="glass">
+    <h2>🎙️ 실시간 감지 데모</h2>
+    <p class="hint">마이크 사용을 허용해주세요.</p>
 
-  <div class="avatars">
-    <div class="avatar">
-      <div class="pic"></div>
-      <div>
-        <div class="name">나</div>
-        <div class="small">마이크 온</div>
-        <div class="meter"><div class="fill" id="vu"></div></div>
-      </div>
-    </div>
-    <div class="avatar">
-      <div class="pic"></div>
-      <div>
-        <div class="name">상대</div>
-        <div class="small">연결됨</div>
-        <div class="meter"><div class="fill" style="width:35%"></div></div>
-      </div>
-    </div>
-  </div>
+    <div id="output" class="row"></div>
+    <button id="reinit">🔄 마이크 다시 연결</button>
 
-  <div class="controls">
-    <button class="btn-main" id="btnStart">통화 시작</button>
-    <button class="btn-mute" id="btnMute">마이크 끄기</button>
-    <button class="btn-end"  id="btnEnd">통화 종료</button>
-  </div>
+    <p class="footer">Model: <code>gSHOySjax</code> (Teachable Machine · ml5.js)</p>
+  </main>
 
-  <div class="panel">
-    <div class="row">
-      <div style="font-weight:700;">실시간 감지 (Teachable Machine)</div>
-      <div class="small" id="modelUrlDisp"></div>
-    </div>
-    <div id="probs"></div>
-    <div id="alert" class="alert">⚠️ 경고: 민감·부적절 표현이 감지되었습니다.</div>
-  </div>
+  <script>
+    // ====== 설정 ======
+    const MODEL_URL = "https://teachablemachine.withgoogle.com/models/gSHOySjax/model.json";
+    const LABELS = ["깔라만씨","배경 소음","수박씨","아이씨"];  // 모델의 클래스명에 맞게
+    let classifier, mic;
+    const bars = {};
 
-  <audio id="localAudio" autoplay muted playsinline></audio>
-</div>
+    // UI 구성
+    const output = document.getElementById("output");
+    function buildUI() {
+      output.innerHTML = "";
+      LABELS.forEach(label => {
+        const meter = document.createElement("div");
+        meter.className = "meter";
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        bar.textContent = `${label}: 0%`;
+        meter.appendChild(bar);
+        output.appendChild(meter);
+        bars[label] = bar;
+      });
+    }
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
-<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/audio@0.8/dist/teachablemachine-audio.min.js"></script>
-<script>
-const TM_BASE = "{tm_base_url}";
-const modelURL = TM_BASE.endsWith("/") ? TM_BASE + "model.json" : TM_BASE + "/model.json";
-const metadataURL = TM_BASE.endsWith("/") ? TM_BASE + "metadata.json" : TM_BASE + "/metadata.json";
+    // 모델/마이크 초기화
+    async function init() {
+      buildUI();
+      try {
+        // p5 마이크 준비(권한 트리거)
+        mic = new p5.AudioIn();
+        await new Promise(res => mic.start(res));
 
-const statusDot = document.getElementById("statusDot");
-const tmStatus  = document.getElementById("tmStatus");
-const modelUrlDisp = document.getElementById("modelUrlDisp");
-const probsWrap = document.getElementById("probs");
-const alertBox = document.getElementById("alert");
-const vu = document.getElementById("vu");
-const audioEl = document.getElementById("localAudio");
+        // 모델 로드
+        classifier = await ml5.soundClassifier(MODEL_URL, { probabilityThreshold: 0 }, () => {
+          console.log("✅ model ready");
+          classifier.classify(gotResult);
+        });
+      } catch (e) {
+        console.error(e);
+        alert("마이크 권한 또는 모델 로드에 문제가 있어요. 브라우저 주소창의 권한 설정을 확인해주세요.");
+      }
+    }
 
-const btnStart = document.getElementById("btnStart");
-const btnEnd   = document.getElementById("btnEnd");
-const btnMute  = document.getElementById("btnMute");
-const timerEl  = document.getElementById("timer");
+    function gotResult(err, results) {
+      if (err || !results) return;
+      results.forEach(r => {
+        const label = r.label;
+        const conf = Math.min(100, Math.max(0, r.confidence * 100));
+        if (bars[label]) {
+          bars[label].style.width = conf.toFixed(1) + "%";
+          bars[label].textContent = `${label}: ${conf.toFixed(1)}%`;
+        }
+      });
+    }
 
-let model, maxClasses = 0;
-let listening = false;
-let stream, audioContext, analyser, dataArray, rafId;
-let muted = false;
-let startAt = 0, timerId;
-
-const BAD_KEYWORDS = ["욕", "비속", "욕설", "offensive", "abuse", "profanity", "toxic"];
-
-function setStatus(ok, msg) {{
-  statusDot.classList.remove("ok","err");
-  if (ok) statusDot.classList.add("ok");
-  else statusDot.classList.add("err");
-  if (msg) tmStatus.textContent = msg;
-}}
-
-function showAlert(show) {{
-  alertBox.style.display = show ? "block" : "none";
-}}
-
-function updateTimer() {{
-  const s = Math.floor((Date.now() - startAt) / 1000);
-  const mm = String(Math.floor(s/60)).padStart(2,"0");
-  const ss = String(s%60)).padStart(2,"0"); // <-- NOTE: we will fix this typo below
-  timerEl.textContent = mm + ":" + ss;
-}}
-</script>
+    document.getElementById("reinit").addEventListener("click", init);
+    init();
+  </script>
 </body>
 </html>
-"""
-
-# ↑ 위에서 JS에 괄호 실수 하나 발견(교육용 주석 남김). 바로 아래에서 올바른 코드로 다시 렌더합니다.
-html_code = html_code.replace("const ss = String(s%60)).padStart(2,\"0\");", "const ss = String(s%60).padStart(2,\"0\");")
-
-if tm_base_url.strip() == "" or "XXXXX" in tm_base_url:
-    st.warning("위 입력창에 **Teachable Machine 오디오 모델 URL**을 입력하세요. (예: `https://teachablemachine.withgoogle.com/models/gSHOySjax/`)")
-
-components.html(html_code, height=740, scrolling=False)
