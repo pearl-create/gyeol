@@ -424,8 +424,15 @@ def show_daily_question():
         }}
 
         /* 5. 수정/삭제 아이콘 버튼 스타일링 (흰색 네모 제거 및 위치 조정) */
-        /* Streamlit 버튼의 기본 배경/테두리 제거 및 아이콘만 남기기 */
-        div[data-testid^="stColumn"] > div > div > button[kind="secondary"] {{
+        
+        /* **추가:** 실제 Streamlit 버튼(disabled 상태)을 화면에서 완전히 숨깁니다. 
+           이것이 이전 요청에서 발생했던 동그라미/네모의 원인입니다. */
+        div[data-testid^="stColumn"] > div > div > button[kind="secondary"][disabled] {{
+             display: none !important;
+        }}
+
+        /* HTML 마크다운으로 삽입된 아이콘 버튼 컨테이너 스타일링 */
+        .action-button-wrapper button {{
             background-color: transparent !important; /* 배경 투명 */
             border: none !important; /* 테두리 제거 */
             box-shadow: none !important; /* 그림자 제거 */
@@ -436,13 +443,14 @@ def show_daily_question():
             justify-content: center;
             padding: 5px; /* 클릭 영역 확보 */
             position: absolute; /* 절대 위치 */
+            cursor: pointer;
             
             /* 마우스를 올렸을 때 나타나는 효과 */
             transition: all 0.2s ease-in-out;
             opacity: 0.7; /* 평소에는 살짝 투명하게 */
         }}
         
-        div[data-testid^="stColumn"] > div > div > button[kind="secondary"]:hover {{
+        .action-button-wrapper button:hover {{
             color: #FF69B4 !important; /* 호버 시 색상 변경 (핫핑크) */
             background-color: transparent !important;
             opacity: 1; /* 호버 시 불투명하게 */
@@ -452,12 +460,12 @@ def show_daily_question():
         
         /* 개별 아이콘 버튼 위치 조정 */
         /* 수정 아이콘 */
-        button[key^="edit_btn_"] {{
+        .edit-icon {{
             bottom: 15px; /* 하단에서 15px 위로 */
             right: 50px; /* 오른쪽에서 50px 안쪽으로 */
         }}
         /* 삭제 아이콘 */
-        button[key^="delete_btn_"] {{
+        .delete-icon {{
             bottom: 15px; /* 하단에서 15px 위로 */
             right: 15px; /* 오른쪽에서 15px 안쪽으로 */
         }}
@@ -543,33 +551,41 @@ def show_daily_question():
                             <p class='bubble-answer'>
                                 {ans['answer']}
                             </p>
+                            
+                            {
+                                # ---------------------- 수정/삭제 아이콘 버튼 (소유자에게만) ----------------------
+                                # Streamlit 버튼 대신 HTML 버튼을 사용하고, CSS로 위치를 제어합니다.
+                                '''
+                                <div class="action-button-wrapper">
+                                    <button class="edit-icon" 
+                                        onclick="document.querySelector('button[key=edit_btn_{i}]').click()">
+                                        ✏️
+                                    </button>
+                                    <button class="delete-icon" 
+                                        onclick="document.querySelector('button[key=delete_btn_{i}]').click()">
+                                        🗑️
+                                    </button>
+                                </div>
+                                ''' if is_owner else ''
+                            }
                         </div>
                         """,
                         unsafe_allow_html=True
                     )
                     
-                    # ---------------------- 수정/삭제 아이콘 버튼 (소유자에게만) ----------------------
+                    # ---------------------- 실제 Streamlit 버튼 (숨겨짐) ----------------------
+                    # 이 버튼은 위에 있는 HTML 버튼의 클릭 이벤트를 받아서 Python 로직을 실행하는 역할만 합니다.
                     if is_owner:
-                        # Streamlit의 컬럼 레이아웃을 사용하지 않고, CSS로 직접 위치를 제어합니다.
-                        # 버튼을 markdown으로 직접 삽입하여 CSS 적용을 용이하게 합니다.
-                        st.markdown(
-                            f"""
-                            <button key="edit_btn_{i}" class="stButton stButton--secondary" 
-                                style="position: absolute; bottom: 15px; right: 50px;" 
-                                onclick="document.querySelector('button[key=edit_btn_{i}]').click()">
-                                ✏️
-                            </button>
-                            <button key="delete_btn_{i}" class="stButton stButton--secondary" 
-                                style="position: absolute; bottom: 15px; right: 15px;" 
-                                onclick="document.querySelector('button[key=delete_btn_{i}]').click()">
-                                🗑️
-                            </button>
-                            """, 
-                            unsafe_allow_html=True
-                        )
-                        # 실제 Streamlit 버튼을 숨겨서 클릭 이벤트를 트리거합니다.
-                        st.button("✏️", key=f"edit_btn_{i}", help="답변 수정", use_container_width=False, type="secondary", disabled=True)
-                        st.button("🗑️", key=f"delete_btn_{i}", help="답변 삭제", use_container_width=False, type="secondary", disabled=True)
+                        # 클릭 시 수정 모드로 전환
+                        if st.button("✏️", key=f"edit_btn_{i}", help="답변 수정", use_container_width=False, type="secondary"):
+                            st.session_state.editing_index = i
+                            st.session_state.confirming_delete_index = -1 
+                            st.rerun()
+                        # 클릭 시 삭제 확인 모드로 전환
+                        if st.button("🗑️", key=f"delete_btn_{i}", help="답변 삭제", use_container_width=False, type="secondary"):
+                            st.session_state.editing_index = -1
+                            st.session_state.confirming_delete_index = i
+                            st.rerun()
 
 
     st.divider()
