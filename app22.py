@@ -367,7 +367,7 @@ def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
 
-    # 1. CSS 스타일 수정: 사이드바 텍스트 흰색 복원 및 답변 박스 스타일 최종 수정
+    # 1. CSS 스타일 수정: 답변 박스 내 버튼 스타일링 추가 및 숨겨진 버튼 처리
     st.markdown(f"""
         <style>
         /* 앱 전체 배경 강렬한 마젠타-퍼플 그라데이션 */
@@ -385,8 +385,7 @@ def show_daily_question():
              color: #EEEEEE !important;
         }}
         
-        /* 1. 사이드바 텍스트 색상 흰색으로 복원 (요청 사항) */
-        /* '멘토 찾기'와 '오늘의 질문' 라디오 버튼을 포함한 모든 사이드바 텍스트를 흰색으로 통일 */
+        /* 1. 사이드바 텍스트 색상 흰색으로 복원 */
         div[data-testid="stSidebarContent"] * {{
             color: #FFFFFF !important; /* 모든 사이드바 콘텐츠를 흰색으로 */
             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
@@ -444,7 +443,8 @@ def show_daily_question():
             color: #333333;
             margin-top: 5px; 
             font-weight: 500;
-            padding-right: 20px; /* 불필요한 아이콘 공간 확보 제거 */
+            padding-right: 20px; 
+            padding-bottom: 40px; /* 하단 버튼 공간 확보 */
         }}
         
         /* 4. 폼 배경색을 흰색으로 설정하여 가독성 높임 */
@@ -458,6 +458,60 @@ def show_daily_question():
             color: #333333 !important; 
             text-shadow: none;
         }}
+
+        /* 5. 수정/삭제 버튼 스타일링 및 위치 지정 (우측 하단) */
+        
+        /* 실제 Streamlit 버튼(disabled 상태 포함)을 화면에서 완전히 숨깁니다. */
+        div[data-testid^="stColumn"] > div > div > button[kind="secondary"],
+        div[data-testid^="stColumn"] > div > div > button[kind="secondary"][disabled] {{
+             display: none !important;
+        }}
+
+        /* HTML 마크다운으로 삽입된 버튼 컨테이너 스타일링 및 위치 */
+        .action-button-wrapper {{
+            position: absolute;
+            bottom: 10px; /* 답변 박스 하단에 배치 */
+            right: 15px; /* 답변 박스 우측에 배치 */
+            display: flex;
+            gap: 10px; /* 버튼 간 간격 */
+            z-index: 10; /* 다른 요소 위에 표시 */
+        }}
+        
+        .action-button-wrapper button {{
+            /* 기본 버튼 스타일 */
+            border-radius: 9999px; /* 완전히 둥근 버튼 */
+            font-size: 0.9em;
+            padding: 5px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-shadow: none; /* 버튼 내부 텍스트 그림자 제거 */
+        }}
+        
+        /* 수정 버튼 스타일 */
+        .edit-button {{
+            background-color: #8A2BE2; /* 보라색 계열 */
+            color: #FFFFFF !important; 
+            border: 1px solid #8A2BE2;
+        }}
+        .edit-button:hover {{
+            background-color: #6A1B9A; /* 짙은 보라색 */
+            transform: translateY(-1px);
+        }}
+        
+        /* 삭제 버튼 스타일 */
+        .delete-button {{
+            background-color: #FFFFFF; /* 흰색 배경 */
+            color: #FF69B4 !important; /* 핫핑크 텍스트 */
+            border: 1px solid #FF69B4;
+        }}
+        .delete-button:hover {{
+            background-color: #FF69B4;
+            color: #FFFFFF !important;
+            transform: translateY(-1px);
+        }}
+
         
         </style>
     """, unsafe_allow_html=True)
@@ -532,14 +586,40 @@ def show_daily_question():
                             <p class='bubble-answer'>
                                 {ans['answer']}
                             </p>
+                            
+                            {
+                                # ---------------------- 수정/삭제 버튼 (소유자에게만) ----------------------
+                                '''
+                                <div class="action-button-wrapper">
+                                    <button class="edit-button" 
+                                        onclick="document.querySelector('button[key=edit_btn_{i}]').click()">
+                                        수정 ✏️
+                                    </button>
+                                    <button class="delete-button" 
+                                        onclick="document.querySelector('button[key=delete_btn_{i}]').click()">
+                                        삭제 🗑️
+                                    </button>
+                                </div>
+                                ''' if is_owner else ''
+                            }
                         </div>
                         """
                     # st.markdown()을 사용하여 HTML 코드를 렌더링
                     st.markdown(answer_display_html, unsafe_allow_html=True)
                     
                     # ---------------------- 실제 Streamlit 버튼 (숨겨짐) ----------------------
-                    # **요청에 따라 연필(수정)과 휴지통(삭제) 아이콘 및 관련 버튼 코드를 완전히 제거했습니다.**
-                    pass
+                    if is_owner:
+                        # 클릭 시 수정 모드로 전환
+                        # type="secondary" 속성을 이용하여 기본 Streamlit 버튼을 숨기고 HTML 버튼으로 클릭 이벤트를 트리거합니다.
+                        if st.button("✏️", key=f"edit_btn_{i}", help="답변 수정", use_container_width=False, type="secondary"):
+                            st.session_state.editing_index = i
+                            st.session_state.confirming_delete_index = -1 
+                            st.rerun()
+                        # 클릭 시 삭제 확인 모드로 전환
+                        if st.button("🗑️", key=f"delete_btn_{i}", help="답변 삭제", use_container_width=False, type="secondary"):
+                            st.session_state.editing_index = -1
+                            st.session_state.confirming_delete_index = i
+                            st.rerun()
 
 
     st.divider()
