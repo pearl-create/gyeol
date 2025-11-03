@@ -20,7 +20,8 @@ WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
 TIMES = ["오전", "오후", "저녁"]
 AGE_BANDS = [
     "만 13세~19세", "만 20세~29세", "만 30세~39세",
-    "만 40세~49세", "만 50세~49세", "만 60세~69세",
+    "만 40세~49세", "만 50세~59세", # 50-59세 수정
+    "만 60세~69세",
     "만 70세~79세", "만 80세~89세", "만 90세 이상"
 ]
 
@@ -390,13 +391,22 @@ def show_daily_question():
             color: #FFFFFF !important; /* 모든 사이드바 콘텐츠를 흰색으로 */
             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
         }}
-        /* 라디오 버튼의 텍스트 색상도 흰색으로 복원 */
+        /* 라디오 버튼의 텍스트 색상도 흰색으로 복원 및 추가 강제 적용 */
         div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label,
         div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label span,
-        div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label div {{
+        div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label div,
+        div[data-testid="stSidebarContent"] .stMarkdown > p {{
              color: #FFFFFF !important;
              text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
         }}
+        /* 로그인/회원가입 라디오 버튼의 텍스트도 흰색으로 복원 */
+        div[data-testid="stSidebarContent"] div[data-testid="stHorizontalBlock"] label,
+        div[data-testid="stSidebarContent"] div[data-testid="stHorizontalBlock"] label span,
+        div[data-testid="stSidebarContent"] div[data-testid="stHorizontalBlock"] label div {{
+             color: #FFFFFF !important;
+             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }}
+
         /* 로그아웃 버튼 텍스트가 흰색으로 보이도록 추가 보장 */
         .stButton button span {{
              color: #FFFFFF !important;
