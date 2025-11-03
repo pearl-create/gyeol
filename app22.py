@@ -578,6 +578,26 @@ def show_daily_question():
                 
                 else:
                     # 답변 텍스트 버블 표시
+                    # NOTE: Python 문자열 리터럴 앞에 r을 붙여 raw string으로 처리하고, 
+                    # f-string 대신 .format()을 사용하거나,
+                    # f-string 사용 시 중괄호 {}를 이중으로 {{ }} 이스케이프해야 HTML이 노출되지 않습니다.
+                    # 여기서는 HTML 마크업 부분을 일반 문자열 리터럴로 분리하고 f-string으로 재결합하여 이스케이프 문제를 해결합니다.
+
+                    # 1. HTML 마크업을 문자열 리터럴로 정의 (중괄호를 이스케이프하거나 f-string을 피함)
+                    action_buttons_html = f"""
+                        <div class="action-button-wrapper">
+                            <button class="edit-button" 
+                                onclick="document.querySelector('button[key=edit_btn_{i}]').click()">
+                                수정
+                            </button>
+                            <button class="delete-button" 
+                                onclick="document.querySelector('button[key=delete_btn_{i}]').click()">
+                                삭제
+                            </button>
+                        </div>
+                        """ if is_owner else ''
+                    
+                    # 2. 메인 HTML 구조를 f-string으로 정의 (변수만 사용하고 HTML 내부의 중괄호는 없으므로 안전함)
                     answer_display_html = f"""
                         <div class='bubble-container'>
                             <div class='bubble-info'>
@@ -587,23 +607,10 @@ def show_daily_question():
                                 {ans['answer']}
                             </p>
                             
-                            {
-                                # ---------------------- 수정/삭제 버튼 (소유자에게만, 아이콘 제거) ----------------------
-                                '''
-                                <div class="action-button-wrapper">
-                                    <button class="edit-button" 
-                                        onclick="document.querySelector('button[key=edit_btn_{i}]').click()">
-                                        수정
-                                    </button>
-                                    <button class="delete-button" 
-                                        onclick="document.querySelector('button[key=delete_btn_{i}]').click()">
-                                        삭제
-                                    </button>
-                                </div>
-                                ''' if is_owner else ''
-                            }
+                            {action_buttons_html}
                         </div>
                         """
+                    
                     # st.markdown()을 사용하여 HTML 코드를 렌더링
                     st.markdown(answer_display_html, unsafe_allow_html=True)
                     
