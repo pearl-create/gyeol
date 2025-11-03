@@ -21,8 +21,7 @@ WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
 TIMES = ["오전", "오후", "저녁"]
 AGE_BANDS = [
     "만 13세~19세", "만 20세~29세", "만 30세~39세",
-    "만 40세~49세", "만 50세~59세", 
-    "만 60세~69세",
+    "만 40세~49세", "만 50세~59세", "만 60세~69세",
     "만 70세~79세", "만 80세~89세", "만 90세 이상"
 ]
 
@@ -145,11 +144,12 @@ def initialize_session_state():
         # 초기 답변이 생성되면 파일에 저장 (최초 1회)
         save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
         
-    # 수정/삭제 기능 관련 상태 초기화. -1은 수정 중인 답변이 없음을 의미합니다.
+    # 🌟 수정: 수정/삭제 기능 관련 상태 초기화 (필수)
     if 'editing_index' not in st.session_state:
-        st.session_state.editing_index = -1
+        # -1은 수정 중인 답변이 없음을 의미
+        st.session_state.editing_index = -1 
         
-    # 삭제 확인 상태 (답변 인덱스)
+    # 🌟 수정: 삭제 확인 상태 (답변 인덱스) 초기화 (필수)
     if 'confirming_delete_index' not in st.session_state:
         st.session_state.confirming_delete_index = -1 
 
@@ -179,7 +179,7 @@ def recommend_mentors(search_field, search_topic, search_style):
 
     if search_style:
         # 'style' 컬럼 사용 가정
-        mentors['score'] += mentors['style'].apply(lambda x: 1 if x == search_style else 0)
+        mentors['score'] += mentors['style'].apply(lambda x: 1 if search_style in x else 0)
 
     if search_field or search_topic or search_style:
         recommended_mentors = mentors[mentors['score'] > 0].sort_values(by='score', ascending=False)
@@ -193,7 +193,7 @@ def recommend_mentors(search_field, search_topic, search_style):
 
 def show_login_form():
     st.header("🔑 로그인")
-    st.caption("비밀번호 기능은 제외하고, 이름만으로 로그인합니다.")
+    st.caption("이름만으로 간편하게 로그인합니다.")
     with st.form("login_form"):
         # 비밀번호를 제외하고 이름만 사용
         name = st.text_input("이름을 입력하세요 (가입 시 사용한 이름)", placeholder="홍길동")
@@ -424,6 +424,16 @@ def show_daily_question():
             background-color: #4A148C;
             border-color: #4A148C;
         }}
+        /* Secondary 버튼을 기본 회색으로 설정 */
+        .stButton button[kind="secondary"] {{
+            background-color: #f0f0f0;
+            border-color: #ccc;
+            color: #333;
+        }}
+        .stButton button[kind="secondary"]:hover {{
+            background-color: #e0e0e0;
+        }}
+        
         </style>
     """, unsafe_allow_html=True)
 
@@ -433,6 +443,7 @@ def show_daily_question():
 
     # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
     if st.session_state.daily_answers:
+        # 답변을 최신순(작성된 순서)으로 표시
         sorted_answers = st.session_state.daily_answers 
         current_name = st.session_state.user_profile.get('name')
         
@@ -443,7 +454,7 @@ def show_daily_question():
             # 답변을 돌아가면서 2개의 컬럼에 배치
             col = cols[i % 2]
             
-            # 📌 소유자 체크
+            # 소유자 체크
             is_owner = (ans['name'] == current_name)
             
             with col:
@@ -453,8 +464,9 @@ def show_daily_question():
                 # 정보 표시
                 st.markdown(f"<div class='bubble-info'>[{ans['age_band']}] <span>{ans['name']}</span>님의 생각</div>", unsafe_allow_html=True)
 
+                # 🌟 수정/삭제 기능 구현 시작
                 if st.session_state.editing_index == i:
-                    # 수정 모드일 때는 수정 폼을 표시
+                    # 1. 수정 모드: 수정 폼을 표시
                     with st.form(f"edit_form_{i}", clear_on_submit=False):
                         edited_text = st.text_area("수정 내용", ans['answer'], height=100, key=f"edit_text_{i}")
                         col_save, col_cancel = st.columns(2)
@@ -466,7 +478,7 @@ def show_daily_question():
                                     st.session_state.editing_index = -1
                                     st.session_state.confirming_delete_index = -1 
                                     save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
-                                    st.success("✅ 답변이 성공적으로 수정되었습니다!")
+                                    st.toast("✅ 답변이 성공적으로 수정되었습니다!")
                                     time.sleep(0.5)
                                     st.rerun()
                                 else:
@@ -478,11 +490,11 @@ def show_daily_question():
                                 st.rerun()
                     
                 elif st.session_state.confirming_delete_index == i:
-                    # 삭제 확인 메시지 표시
+                    # 2. 삭제 확인 모드: 확인 메시지 표시
                     st.warning(f"정말로 답변을 삭제하시겠습니까?", icon="⚠️")
                     col_confirm, col_cancel = st.columns(2)
                     with col_confirm:
-                        # 삭제 버튼은 Danger 스타일로 변경
+                        # 삭제 버튼은 Secondary 스타일로 설정
                         if st.button("✅ 예, 삭제합니다.", key=f"confirm_delete_{i}", type="secondary", use_container_width=True):
                             del st.session_state.daily_answers[i]
                             save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
@@ -497,22 +509,22 @@ def show_daily_question():
                             st.rerun()
                     
                 else:
-                    # 일반 답변 표시
+                    # 3. 일반 답변 표시
                     st.markdown(f"<p class='bubble-answer'>{ans['answer']}</p>", unsafe_allow_html=True)
                     
                     # ---------------------- 수정/삭제 버튼 (안정적 배치) ----------------------
                     if is_owner:
                         st.divider()
+                        # 버튼들을 한 줄에 배치하고 뒤에 공간을 둠
                         col_edit, col_delete, col_spacer = st.columns([1, 1, 4])
                         
                         with col_edit:
-                            if st.button("✏️ 수정", key=f"edit_btn_{i}", use_container_width=True):
+                            if st.button("✏️ 수정", key=f"edit_btn_{i}", use_container_width=True, type="secondary"):
                                 st.session_state.editing_index = i
                                 st.session_state.confirming_delete_index = -1 
                                 st.rerun()
                         
                         with col_delete:
-                            # 삭제 버튼은 secondary로 설정
                             if st.button("🗑️ 삭제", key=f"delete_btn_{i}", use_container_width=True, type="secondary"):
                                 st.session_state.editing_index = -1
                                 st.session_state.confirming_delete_index = i
