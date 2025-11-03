@@ -487,16 +487,18 @@ def show_daily_question():
             transition: all 0.2s ease-in-out;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             text-shadow: none; /* 버튼 내부 텍스트 그림자 제거 */
+            border: 1px solid; /* 명확한 경계를 위해 추가 */
         }}
         
         /* 수정 버튼 스타일 */
         .edit-button {{
             background-color: #8A2BE2; /* 보라색 계열 */
             color: #FFFFFF !important; 
-            border: 1px solid #8A2BE2;
+            border-color: #8A2BE2;
         }}
         .edit-button:hover {{
             background-color: #6A1B9A; /* 짙은 보라색 */
+            border-color: #6A1B9A;
             transform: translateY(-1px);
         }}
         
@@ -504,11 +506,12 @@ def show_daily_question():
         .delete-button {{
             background-color: #FFFFFF; /* 흰색 배경 */
             color: #FF69B4 !important; /* 핫핑크 텍스트 */
-            border: 1px solid #FF69B4;
+            border-color: #FF69B4;
         }}
         .delete-button:hover {{
             background-color: #FF69B4;
             color: #FFFFFF !important;
+            border-color: #FF69B4;
             transform: translateY(-1px);
         }}
 
