@@ -5,7 +5,6 @@ import time
 import os
 import json 
 import html # 텍스트 이스케이프용
-from datetime import datetime # 시간 기록을 위해 datetime 모듈 추가
 
 # --- 1. 데이터 로드 및 상수 정의 ---
 
@@ -113,11 +112,7 @@ def load_json_data(file_path, default_value):
     if os.path.exists(file_path):
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # 리스트가 아니거나 비어있으면 기본값 반환
-                if not isinstance(data, list):
-                    return default_value
-                return data
+                return json.load(f)
         except Exception as e:
             st.warning(f"데이터 파일 로드 오류 ({file_path}): {e}. 기본값으로 시작합니다.")
             return default_value
@@ -141,48 +136,34 @@ def initialize_session_state():
     # 영구 저장된 사용자 데이터를 로드
     st.session_state.all_users = load_json_data(USERS_FILE_PATH, {})
 
-    # 1. 초기 상태 설정 (st.session_state가 유지되므로, 값이 없으면 기본값 설정)
     if 'logged_in' not in st.session_state:
         st.session_state.logged_in = False
-    
-    if 'user_name' not in st.session_state:
-        st.session_state.user_name = ""
-        
     if 'user_profile' not in st.session_state:
         st.session_state.user_profile = {}
-    
-    # 2. 새로고침 시 자동 로그인 로직 강화
-    # 'user_name' 키가 세션에 남아있고, 그 이름이 실제 'all_users' 데이터에 존재하면 로그인 상태 복원
-    if st.session_state.user_name and st.session_state.user_name in st.session_state.all_users:
-        st.session_state.user_profile = st.session_state.all_users[st.session_state.user_name]
-        st.session_state.logged_in = True
-    else:
-        # user_name이 없거나, 유효하지 않으면 로그인 상태 초기화
-        st.session_state.logged_in = False
-        st.session_state.user_profile = {}
-        # 주의: user_name이 빈 문자열이 아니지만 all_users에 없다면, user_name을 비워 다음 시도에 영향을 주지 않도록 함
-        if st.session_state.user_name and st.session_state.user_name not in st.session_state.all_users:
-             st.session_state.user_name = "" # 유효하지 않은 이름은 초기화
 
     # 영구 저장된 답변 데이터를 로드하거나, 없으면 초기 답변을 생성
-    if 'daily_answers' not in st.session_state:
-        st.session_state.daily_answers = load_json_data(ANSWERS_FILE_PATH, [])
+    daily_answers_from_file = load_json_data(ANSWERS_FILE_PATH, None)
+
+    if daily_answers_from_file is not None:
+        st.session_state.daily_answers = daily_answers_from_file
+    else:
+        # 초기 답변 생성 로직 (파일이 없을 경우)
+        initial_answers = []
+        st.session_state.daily_answers = initial_answers
+        # 초기 답변이 생성되면 파일에 저장 (최초 1회)
+        save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
         
-    # 수정/삭제 기능 관련 상태 초기화.
+    # 수정/삭제 기능 관련 상태 초기화. -1은 수정 중인 답변이 없음을 의미합니다.
     if 'editing_index' not in st.session_state:
         st.session_state.editing_index = -1
         
-    # 삭제 확인 상태
+    # 삭제 확인 상태 (답변 인덱스)
     if 'confirming_delete_index' not in st.session_state:
         st.session_state.confirming_delete_index = -1 
 
+
     if 'recommendations' not in st.session_state:
         st.session_state.recommendations = pd.DataFrame()
-        
-    # 🌟 [수정] 마지막 페이지 상태 유지 - 로그인 상태라면 기본값을 "오늘의 질문"으로 설정
-    if 'last_page' not in st.session_state:
-        # 로그인 상태라면 '오늘의 질문'을 기본으로, 아니라면 '멘토 찾기'를 기본으로 설정
-        st.session_state.last_page = "오늘의 질문" if st.session_state.logged_in else "멘토 찾기" 
 
 initialize_session_state()
 
@@ -340,9 +321,6 @@ def show_login_form():
             elif name in st.session_state.all_users:
                 st.session_state.user_profile = st.session_state.all_users[name]
                 st.session_state.logged_in = True
-                # --- 로그인 성공 시 사용자 이름 저장 (이 키가 새로고침 시 로그인 상태를 유지하는 핵심) ---
-                st.session_state.user_name = name 
-                # ---------------------------------------------
                 st.success(f"🎉 {name}님, 환영합니다! 서비스를 시작합니다.")
                 st.rerun()
             else:
@@ -408,17 +386,11 @@ def show_registration_form():
                 st.session_state.all_users[name] = user_profile_data
                 st.session_state.user_profile = user_profile_data
                 st.session_state.logged_in = True
-                # --- 가입 성공 시 사용자 이름 저장 (이 키가 새로고침 시 로그인 상태를 유지하는 핵심) ---
-                st.session_state.user_name = name
-                # ------------------------------------------
 
                 # 사용자 데이터 영구 저장
                 save_json_data(st.session_state.all_users, USERS_FILE_PATH)
 
                 st.success(f"🎉 {name}님, 성공적으로 가입 및 로그인되었습니다!")
-                
-                # 🌟 [추가] 로그인 성공 후 '오늘의 질문' 페이지로 이동
-                st.session_state.last_page = "오늘의 질문" 
                 st.rerun()
 
 
@@ -429,24 +401,18 @@ def show_daily_question():
     # 새로고침 시 파일 최신 상태로 반영
     st.session_state.daily_answers = load_json_data(ANSWERS_FILE_PATH, st.session_state.get("daily_answers", []))
     
+    # ⭐ 오늘의 질문 페이지의 버블 스타일 CSS는 그대로 유지합니다.
+
     daily_q = "🤔 **'나와 전혀 다른 세대의 삶을 하루만 살아볼 수 있다면, 어떤 세대의 삶을 살아보고 싶은지 이유와 함께 알려주세요!'**"
     st.subheader(daily_q)
 
-    # **[수정] 답변을 timestamp 기준으로 내림차순 정렬 (최신 답변이 위로)**
-    # timestamp가 없는 경우 (기존 데이터)를 위해 현재 시간을 기본값으로 사용
-    sorted_answers = sorted(
-        st.session_state.daily_answers,
-        key=lambda x: x.get('timestamp', datetime.now().isoformat()),
-        reverse=True # 최신순 (내림차순)
-    )
-
     # ===== 답변 그리드 (3열) =====
-    if sorted_answers:
+    if st.session_state.daily_answers:
         cols = st.columns(3) # 3개의 컬럼을 한 번만 생성
         current_name = st.session_state.user_profile.get('name')
 
         # 1. 답변 표시
-        for i, ans in enumerate(sorted_answers):
+        for i, ans in enumerate(st.session_state.daily_answers):
             
             # 3열 순환 배치
             with cols[i % 3]: 
@@ -455,25 +421,12 @@ def show_daily_question():
                 name = html.escape(ans.get('name', '익명'))
                 age = html.escape(ans.get('age_band', '미등록'))
                 is_owner = (name == (current_name or ""))
-                
-                # 타임스탬프 포맷팅 (optional, for display only)
-                timestamp_str = ans.get('timestamp', '')
-                try:
-                    # ISO 포맷 문자열을 datetime 객체로 변환
-                    submit_time = datetime.fromisoformat(timestamp_str)
-                    time_display = submit_time.strftime("%m/%d %H:%M")
-                except:
-                    time_display = "시간 미등록"
-
 
                 # 답변 버블 HTML 렌더링
                 st.markdown(
                     f"""
                     <div class="bubble-container">
-                        <div class="bubble-info">
-                            [{age}] <strong>{name}</strong> 
-                            <span style="float:right; font-size:12px; color:#9CA3AF;">{time_display}</span>
-                        </div>
+                        <div class="bubble-info">[{age}] <strong>{name}</strong></div>
                         <p class="bubble-answer">{safe_text}</p>
                     </div>
                     """,
@@ -482,24 +435,17 @@ def show_daily_question():
 
                 # ✅ 소유자만 수정/삭제 버튼 표시 (버블 아래에 정렬)
                 if is_owner:
-                    # 원본 데이터 인덱스 찾기 (정렬 전의 인덱스를 찾아야 함)
-                    try:
-                        original_idx = st.session_state.daily_answers.index(ans)
-                    except ValueError:
-                        original_idx = -1 # 찾을 수 없음 (오류 방지)
-                        
-                    if original_idx != -1:
-                        b1, b2 = st.columns(2)
-                        with b1:
-                            if st.button("✏️ 수정", key=f"edit_{i}", use_container_width=True):
-                                st.session_state.editing_index = original_idx
-                                st.session_state.confirming_delete_index = -1 # 다른 상태 해제
-                                st.rerun()
-                        with b2:
-                            if st.button("🗑️ 삭제", key=f"delete_{i}", use_container_width=True):
-                                st.session_state.confirming_delete_index = original_idx # 삭제 확인 상태로 전환
-                                st.session_state.editing_index = -1 # 다른 상태 해제
-                                st.rerun()
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        if st.button("✏️ 수정", key=f"edit_{i}", use_container_width=True):
+                            st.session_state.editing_index = i
+                            st.session_state.confirming_delete_index = -1 # 다른 상태 해제
+                            st.rerun()
+                    with b2:
+                        if st.button("🗑️ 삭제", key=f"delete_{i}", use_container_width=True):
+                            st.session_state.confirming_delete_index = i # 삭제 확인 상태로 전환
+                            st.session_state.editing_index = -1 # 다른 상태 해제
+                            st.rerun()
     else:
         st.info("아직 등록된 답변이 없습니다. 첫 번째 답변을 남겨보세요!")
 
@@ -507,62 +453,46 @@ def show_daily_question():
     # 2. 삭제 확인 UI (메인 영역 상단에 표시)
     if st.session_state.confirming_delete_index != -1:
         idx = st.session_state.confirming_delete_index
-        
-        # 유효성 검사 (idx가 유효한지 확인)
-        if 0 <= idx < len(st.session_state.daily_answers):
-            st.divider()
-            st.error(f"⚠️ **{st.session_state.daily_answers[idx]['name']}**님의 답변을 정말 삭제하시겠어요? 이 작업은 되돌릴 수 없습니다.", icon="⚠️")
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("✅ 예, 삭제합니다.", type="primary", use_container_width=True):
-                    del st.session_state.daily_answers[idx]
-                    save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
-                    st.session_state.confirming_delete_index = -1
-                    st.toast("🗑️ 답변이 삭제되었습니다.")
-                    st.rerun()
-            with c2:
-                if st.button("❌ 취소", use_container_width=True):
-                    st.session_state.confirming_delete_index = -1
-                    st.rerun()
-        else:
-            # 인덱스 오류가 발생하면 상태 초기화
-            st.session_state.confirming_delete_index = -1 
-            st.rerun()
-
+        st.divider()
+        st.error(f"⚠️ **{st.session_state.daily_answers[idx]['name']}**님의 답변을 정말 삭제하시겠어요? 이 작업은 되돌릴 수 없습니다.", icon="⚠️")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✅ 예, 삭제합니다.", type="primary", use_container_width=True):
+                del st.session_state.daily_answers[idx]
+                save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                st.session_state.confirming_delete_index = -1
+                st.toast("🗑️ 답변이 삭제되었습니다.")
+                st.rerun()
+        with c2:
+            if st.button("❌ 취소", use_container_width=True):
+                st.session_state.confirming_delete_index = -1
+                st.rerun()
 
     # 3. 수정 UI (메인 영역 상단에 표시)
     if st.session_state.editing_index != -1:
         idx = st.session_state.editing_index
-        
-        # 유효성 검사
-        if 0 <= idx < len(st.session_state.daily_answers):
-            st.divider()
-            st.subheader("✏️ 답변 수정")
-            with st.form("edit_form"):
-                st.caption(f"수정 중인 답변: **{st.session_state.daily_answers[idx]['name']}**님의 내용")
-                new_text = st.text_area("내용", st.session_state.daily_answers[idx]['answer'], height=140)
-                s1, s2 = st.columns(2)
-                with s1:
-                    save_ok = st.form_submit_button("💾 저장", type="primary", use_container_width=True)
-                with s2:
-                    cancel_ok = st.form_submit_button("취소", use_container_width=True)
-                    
-            if save_ok:
-                if new_text.strip():
-                    st.session_state.daily_answers[idx]['answer'] = new_text.strip()
-                    # 수정 시에도 timestamp를 갱신할 수 있음 (선택 사항, 여기서는 갱신하지 않음)
-                    save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
-                    st.session_state.editing_index = -1
-                    st.toast("💾 답변이 저장되었습니다.")
-                    st.rerun()
-                else:
-                    st.error("수정할 내용을 입력해 주세요.")
-            if cancel_ok:
+        st.divider()
+        st.subheader("✏️ 답변 수정")
+        with st.form("edit_form"):
+            st.caption(f"수정 중인 답변: **{st.session_state.daily_answers[idx]['name']}**님의 내용")
+            new_text = st.text_area("내용", st.session_state.daily_answers[idx]['answer'], height=140)
+            s1, s2 = st.columns(2)
+            with s1:
+                save_ok = st.form_submit_button("💾 저장", type="primary", use_container_width=True)
+            with s2:
+                cancel_ok = st.form_submit_button("취소", use_container_width=True)
+                
+        if save_ok:
+            if new_text.strip():
+                st.session_state.daily_answers[idx]['answer'] = new_text.strip()
+                save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
                 st.session_state.editing_index = -1
+                st.toast("💾 답변이 저장되었습니다.")
                 st.rerun()
-        else:
-            # 인덱스 오류가 발생하면 상태 초기화
-            st.session_state.editing_index = -1 
+            else:
+                st.error("수정할 내용을 입력해 주세요.")
+        if cancel_ok:
+            st.session_state.editing_index = -1
             st.rerun()
 
 
@@ -585,14 +515,11 @@ def show_daily_question():
 
             if submitted:
                 if answer_text.strip():
-                    # **[추가] 제출 시점의 timestamp 기록**
-                    new_answer_data = {
+                    st.session_state.daily_answers.append({
                         "name": current_name,
                         "age_band": current_age,
-                        "answer": answer_text.strip(),
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    st.session_state.daily_answers.append(new_answer_data)
+                        "answer": answer_text.strip()
+                    })
                     save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
                     st.success("✅ 제출 완료! 목록에 바로 반영됐어요.")
                     st.rerun()
@@ -728,20 +655,11 @@ def main():
 
     else:
         # 로그인된 사용자용 메인 화면
-        page_options = ["멘토 찾기", "오늘의 질문"]
-        
-        # 🌟 [수정] 기본 페이지 설정을 세션 상태의 last_page 값으로 설정
-        # (initialize_session_state에서 로그인 상태일 때 '오늘의 질문'으로 이미 설정됨)
-        default_index = page_options.index(st.session_state.last_page) if st.session_state.last_page in page_options else 1
-        
         page = st.sidebar.radio(
             "페이지 이동",
-            page_options,
-            index=default_index
+            ["멘토 찾기", "오늘의 질문"],
+            index=0
         )
-        
-        # 페이지 변경 시 last_page 상태 업데이트
-        st.session_state.last_page = page 
 
         st.sidebar.divider()
         st.sidebar.markdown(f"**환영합니다, {st.session_state.user_profile.get('name')}님!**")
@@ -750,22 +668,8 @@ def main():
         if st.sidebar.button("🚪 로그아웃"):
             st.session_state.logged_in = False
             st.session_state.user_profile = {}
-            # --- 로그아웃 시 사용자 이름도 초기화 ---
-            st.session_state.user_name = ""
-            # ------------------------------------
             st.info("로그아웃되었습니다.")
             st.rerun()
-            
-        # --- [추가] 디버깅 정보 패널 ---
-        st.sidebar.divider()
-        st.sidebar.subheader("⚙️ 디버깅 정보")
-        st.sidebar.caption("새로고침 후에도 이 값이 남아있어야 합니다.")
-        st.sidebar.json({
-            "Logged In": st.session_state.logged_in,
-            "User Name (Persistence Key)": st.session_state.user_name,
-            "Last Page": st.session_state.last_page
-        })
-        # --------------------------------
 
         if page == "멘토 찾기":
             show_mentor_search_and_connect()
