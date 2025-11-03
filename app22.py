@@ -352,48 +352,62 @@ def show_mentor_search_and_connect():
     elif not submitted:
         st.info("검색 조건을 입력하고 '🔎 검색 시작' 버튼을 눌러 멘토를 찾아보세요.")
 
+# 연령대별 색상 매핑 함수
+def get_bubble_color(age_band):
+    age_prefix = int(age_band.split(' ')[1].split('세')[0])
+    
+    if age_prefix >= 90:
+        return "#FFDDC1", "#FFDDC1" # 90대 이상 (아주 연한 주황)
+    elif age_prefix >= 80:
+        return "#FFCCB6", "#FFCCB6" # 80대 (연한 주황)
+    elif age_prefix >= 70:
+        return "#FFB5A0", "#FFB5A0" # 70대 (중간 주황)
+    elif age_prefix >= 60:
+        return "#A5DFF9", "#A5DFF9" # 60대 (연한 하늘색)
+    elif age_prefix >= 50:
+        return "#C5E6F6", "#C5E6F6" # 50대 (아주 연한 하늘색)
+    elif age_prefix >= 40:
+        return "#D2F0E1", "#D2F0E1" # 40대 (연한 녹색)
+    elif age_prefix >= 30:
+        return "#E1F8D9", "#E1F8D9" # 30대 (아주 연한 녹색)
+    elif age_prefix >= 20:
+        return "#FFF3CD", "#FFF3CD" # 20대 (연한 노랑)
+    else: # 10대
+        return "#FFEDD5", "#FFEDD5" # 10대 (아주 연한 노랑)
 
 def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
 
-    # 1. 디자인: 말풍선 모양을 구현하기 위한 Custom CSS (전역 적용)
-    st.markdown("""
+    # 1. 디자인: 말풍선 모양 및 색상, 배경 그라데이션, 움직임 제거 Custom CSS
+    st.markdown(f"""
         <style>
-        /* 1. Keyframes for Floating Effect (말풍선이 둥둥 떠다니는 애니메이션) */
-        @keyframes float {
-            0% {
-                transform: translate(0, 0px);
-            }
-            50% {
-                transform: translate(0, -8px); /* 위로 8px 이동 */
-            }
-            100% {
-                transform: translate(0, 0px);
-            }
-        }
+        /* 움직이는 효과 제거 (keyframes float 삭제) */
 
-        /* 앱 전체 배경색 변경 */
-        .stApp {
-            background-color: #f7f9fc;
-        }
+        /* 앱 전체 배경 따스한 그라데이션 */
+        .stApp {{
+            background: linear-gradient(135deg, #FFE0B2 0%, #FFCC80 100%); /* 따스한 오렌지-베이지 그라데이션 */
+            background-attachment: fixed; /* 스크롤 시에도 배경 고정 */
+        }}
 
         /* 2. 말풍선 컨테이너 (st.container) 스타일링 */
-        .bubble-container {
+        .bubble-container {{
             position: relative;
-            background: #ffffff;
             border-radius: 1.5em; /* 둥근 모서리 */
             padding: 20px;
             margin: 20px 0 35px 0; /* 꼬리가 아래로 내려올 공간 확보를 위해 아래쪽 여백 증가 */
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            
-            /* 애니메이션 적용 */
-            animation: float 4s ease-in-out infinite; /* 4초 동안 부드럽게 무한 반복 */
-            transition: all 0.3s;
-        }
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15); /* 그림자 강화 */
+            transition: all 0.2s ease-in-out; /* hover 효과를 위해 transition 추가 */
+            border: 1px solid rgba(0,0,0,0.1); /* 테두리 추가 */
+        }}
+        
+        .bubble-container:hover {{
+            transform: translateY(-5px); /* hover 시 살짝 뜨는 효과 */
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); /* hover 시 그림자 강화 */
+        }}
         
         /* 3. 말풍선 꼬리 (Speech Bubble Tail) - 컨테이너 하단 중앙에 삼각형 추가 */
-        .bubble-container::after {
+        .bubble-container::after {{
             content: '';
             position: absolute;
             bottom: -20px; /* 꼬리가 아래로 튀어나오도록 조정 */
@@ -402,33 +416,44 @@ def show_daily_question():
             width: 0;
             height: 0;
             border: 10px solid transparent;
-            border-top-color: #ffffff; /* 컨테이너와 같은 색상으로 꼬리 생성 */
             border-bottom: 0;
             margin-left: -10px;
-        }
+        }}
         
         /* 4. Streamlit 기본 컨테이너의 패딩/마진 재설정 */
-        /* st.container를 사용하고 내부 요소에 직접 클래스를 부여하여 제어 */
-        div[data-testid="stVerticalBlock"] > div:not(:first-child) > div {
+        div[data-testid="stVerticalBlock"] > div:not(:first-child) > div {{
             padding: 0; /* st.container의 불필요한 패딩 제거 */
-        }
+        }}
         
         /* 5. 답변 텍스트 스타일 */
-        .bubble-answer {
+        .bubble-answer {{
             font-size: 1.1em;
             line-height: 1.6;
             color: #333333;
             margin-top: 10px;
-        }
+        }}
 
         /* 6. 이름/나이대 정보 스타일 */
-        .bubble-info {
-            font-size: 0.9em;
-            color: #555555;
-            border-bottom: 2px solid #f0f0f0;
+        .bubble-info {{
+            font-size: 1em; /* 폰트 크기 조절 */
+            font-weight: bold; /* 이름 부분만 볼드체 */
+            color: #444444;
+            border-bottom: 1px solid rgba(0,0,0,0.1); /* 얇은 구분선 */
             padding-bottom: 8px;
             margin-bottom: 12px;
-        }
+        }}
+
+        /* 연령대별 말풍선 색상 CSS 클래스 */
+        .age-10s {{ background-color: #FFEDD5; }} .age-10s::after {{ border-top-color: #FFEDD5; }}
+        .age-20s {{ background-color: #FFF3CD; }} .age-20s::after {{ border-top-color: #FFF3CD; }}
+        .age-30s {{ background-color: #E1F8D9; }} .age-30s::after {{ border-top-color: #E1F8D9; }}
+        .age-40s {{ background-color: #D2F0E1; }} .age-40s::after {{ border-top-color: #D2F0E1; }}
+        .age-50s {{ background-color: #C5E6F6; }} .age-50s::after {{ border-top-color: #C5E6F6; }}
+        .age-60s {{ background-color: #A5DFF9; }} .age-60s::after {{ border-top-color: #A5DFF9; }}
+        .age-70s {{ background-color: #FFB5A0; }} .age-70s::after {{ border-top-color: #FFB5A0; }}
+        .age-80s {{ background-color: #FFCCB6; }} .age-80s::after {{ border-top-color: #FFCCB6; }}
+        .age-90s-plus {{ background-color: #FFDDC1; }} .age-90s-plus::after {{ border-top-color: #FFDDC1; }}
+
         </style>
     """, unsafe_allow_html=True)
 
@@ -445,14 +470,35 @@ def show_daily_question():
         cols = st.columns(3)
         
         for i, ans in enumerate(sorted_answers):
-            # i % 3 을 사용하여 각 답변을 3개의 컬럼에 순차적으로 배치
+            # 연령대별 클래스 동적 할당
+            age_prefix_num = int(ans['age_band'].split(' ')[1].split('세')[0])
+            if age_prefix_num >= 90:
+                age_class = "age-90s-plus"
+            elif age_prefix_num >= 80:
+                age_class = "age-80s"
+            elif age_prefix_num >= 70:
+                age_class = "age-70s"
+            elif age_prefix_num >= 60:
+                age_class = "age-60s"
+            elif age_prefix_num >= 50:
+                age_class = "age-50s"
+            elif age_prefix_num >= 40:
+                age_class = "age-40s"
+            elif age_prefix_num >= 30:
+                age_class = "age-30s"
+            elif age_prefix_num >= 20:
+                age_class = "age-20s"
+            else: # 10대
+                age_class = "age-10s"
+
             with cols[i % 3]:
                 # st.container를 사용하고 커스텀 CSS 클래스를 적용하여 말풍선 모양을 만듭니다.
+                # 연령대별 클래스를 bubble-container에 추가
                 st.markdown(
                     f"""
-                    <div class='bubble-container'>
+                    <div class='bubble-container {age_class}'>
                         <p class='bubble-info'>
-                            🎈 **[{ans['age_band']}] {ans['name']}**님의 생각
+                            [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
                         </p>
                         <p class='bubble-answer'>
                             {ans['answer']}
@@ -485,7 +531,7 @@ def show_daily_question():
                 # 🌟 수정: 답변 데이터 영구 저장
                 save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
 
-                st.success("✅ 답변이 성공적으로 제출되었습니다! 이제 움직이는 말풍선 목록에서 바로 확인하실 수 있습니다.")
+                st.success("✅ 답변이 성공적으로 제출되었습니다! 이제 말풍선 목록에서 바로 확인하실 수 있습니다.")
                 st.rerun() 
             else:
                 st.warning("답변 내용을 입력해 주세요.")
