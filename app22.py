@@ -373,9 +373,9 @@ def show_daily_question():
     # 📌 배경색 및 버블 스타일 CSS 적용
     st.markdown("""
         <style>
-        /* 앱 전체 배경 (핫핑크/퍼플 그라데이션) */
+        /* 앱 전체 배경 (눈에 띄는 블루-마젠타 그라데이션으로 변경) */
         .stApp {
-            background: linear-gradient(135deg, #FF69B4 0%, #8A2BE2 100%); 
+            background: linear-gradient(135deg, #00C6FF 0%, #EE24E7 100%); 
             background-attachment: fixed;
         }
 
