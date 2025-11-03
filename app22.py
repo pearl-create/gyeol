@@ -492,14 +492,14 @@ def show_daily_question():
             box-shadow: none !important;
         }}
         
-        /* 개별 아이콘 버튼 위치 조정 */
-        /* 수정 아이콘 */
+        /* 개별 아이콘 버튼 위치 조정 (연필/휴지통) */
+        /* 수정 아이콘 (연필) */
         .edit-icon {{
             top: 20px; /* 상단에서 20px 아래로 (정보 영역 옆) */
             right: 50px; /* 오른쪽에서 50px 안쪽으로 */
             font-size: 1.1em; /* 크기 약간 줄임 */
         }}
-        /* 삭제 아이콘 */
+        /* 삭제 아이콘 (휴지통) */
         .delete-icon {{
             top: 20px; /* 상단에서 20px 아래로 */
             right: 20px; /* 오른쪽에서 20px 안쪽으로 */
