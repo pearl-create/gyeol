@@ -1,0 +1,3 @@
+[general]
+# Python 3.10은 tflite-support와 pandas가 안정적으로 작동하는 버전입니다.
+python_version = 3.10
