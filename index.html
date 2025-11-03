@@ -2,295 +2,119 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>Meet-Style + Teachable Machine Preview (mini)</title>
-  <!-- 모바일 권한 힌트 -->
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- p5.js (ml5의 일부 예제들이 p5에 의존) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.5.0/p5.min.js"></script>
-  <!-- tfjs & ml5 -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
-  <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
-
+  <title>비속어 감지 화상 통화 (양분 화면)</title>
   <style>
-    :root{
-      --bg:#0b0f14; --panel:#121820; --card:#1b2430; --text:#e9eef5; --muted:#9fb3c8; --accent:#5b9bff;
-      --danger:#ff4d4f; --ok:#28c76f;
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #111;
+      color: white;
     }
-    *{box-sizing:border-box}
-    body{margin:0;background:linear-gradient(135deg,#0b0f14,#121820);color:var(--text);font-family:Inter,system-ui,Segoe UI,Apple SD Gothic Neo,AppleGothic,Arial,sans-serif}
-    .meet {
-      display:grid; grid-template-rows:auto 1fr auto; height:100dvh; width:100%;
+    /* 왼쪽: 화상 통화 */
+    .left {
+      flex: 1;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
     }
-    .topbar{
-      display:flex; align-items:center; justify-content:space-between;
-      padding:10px 16px; background:rgba(0,0,0,0.35); backdrop-filter: blur(6px); border-bottom:1px solid rgba(255,255,255,0.08);
+    video {
+      width: 90%;
+      max-height: 70%;
+      border-radius: 16px;
+      object-fit: cover;
+      border: 2px solid #444;
+      box-shadow: 0 0 12px rgba(0,0,0,0.4);
     }
-    .topbar .left{display:flex; gap:10px; align-items:center}
-    .badge{background:rgba(255,255,255,0.08); padding:6px 10px; border-radius:12px; font-size:12px; color:var(--muted)}
-    .room { font-weight:600; letter-spacing:.3px}
-    .main{
-      position:relative; display:grid; grid-template-columns: 1fr 320px; gap:14px; padding:14px;
+    .controls {
+      margin-top: 20px;
+      display: flex;
+      gap: 12px;
     }
-    .videoStage{
-      position:relative; border-radius:18px; background: #000; box-shadow: 0 10px 30px rgba(0,0,0,0.35); overflow:hidden;
-      display:flex; align-items:center; justify-content:center;
+    button {
+      background: #2c2c2c;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 15px;
+      cursor: pointer;
+      transition: background 0.3s;
     }
-    .fakeVideo{
-      width:100%; height:100%; background:
-        radial-gradient(1200px 600px at 40% 30%, #1e293b 0%, #0b0f14 60%),
-        url('https://images.unsplash.com/photo-1544198365-8892eb97de7e?q=80&w=1400&auto=format&fit=crop') center/cover no-repeat;
-      filter: saturate(1.05) contrast(1.05) brightness(0.9);
+    button:hover {
+      background: #3e3e3e;
     }
-    .sidebar{
-      border-radius:18px; background:var(--panel); border:1px solid rgba(255,255,255,0.08); overflow:hidden;
-      display:flex; flex-direction:column;
+    .muted {
+      background: #b52d2d;
     }
-    .sidebar h3{margin:14px 14px 0 14px; font-size:14px; color:#c8d7ea; opacity:.9}
-    .chat{
-      padding:12px 14px; flex:1; overflow:auto; color:var(--muted); font-size:14px;
+
+    /* 오른쪽: Teachable Machine */
+    .right {
+      flex: 1;
+      border-left: 2px solid #222;
     }
-    .bottombar{
-      display:flex; align-items:center; justify-content:center; gap:10px; padding:14px;
-    }
-    .ctrl{
-      display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.08);
-      padding:8px 10px; border-radius:40px;
-    }
-    .btn{
-      border:none; color:var(--text); background:var(--card); padding:10px 14px; border-radius:18px; cursor:pointer; font-weight:600;
-      border:1px solid rgba(255,255,255,0.08);
-    }
-    .btn:hover{filter:brightness(1.08)}
-    .btn.danger{background:#2a1414; border-color:#3d1a1a; color:#ffb3b3}
-    /* 🔹 TM 미니 위젯 (Meet 우하단 PiP 느낌) */
-    .tm-mini{
-      position:absolute; right:14px; bottom:14px; width:300px; background:var(--card);
-      border:1px solid rgba(255,255,255,0.12); border-radius:16px; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-      overflow:hidden; z-index:10;
-    }
-    .tm-head{
-      display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:rgba(0,0,0,0.3);
-      border-bottom:1px solid rgba(255,255,255,0.08);
-    }
-    .tm-head b{font-size:13px}
-    .tm-body{padding:10px; max-height:220px; overflow:auto}
-    .bar{
-      height:8px; background:rgba(255,255,255,0.1); border-radius:6px; overflow:hidden;
-    }
-    .bar > span{
-      display:block; height:100%; width:0%;
-      background:linear-gradient(90deg,var(--accent),#72ffa5);
-      transition: width .3s ease;
-    }
-    .row{display:grid; grid-template-columns: 1fr 48px; gap:8px; align-items:center; margin:10px 0}
-    .row label{font-size:13px; color:#cfe0f5}
-    .row .pct{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; color:#a8c3e8; text-align:right}
-    .tm-foot{
-      display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border-top:1px solid rgba(255,255,255,0.08);
-      background:rgba(0,0,0,0.25); font-size:12px; color:var(--muted)
-    }
-    .dot{width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; background:var(--danger)}
-    .dot.on{background:var(--ok)}
-    /* 스크롤 스타일 */
-    ::-webkit-scrollbar{height:10px;width:10px}
-    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.16); border-radius:20px}
-    ::-webkit-scrollbar-track{background:transparent}
-    @media (max-width: 900px){
-      .main{grid-template-columns: 1fr}
-      .sidebar{display:none}
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
     }
   </style>
 </head>
 <body>
-  <div class="meet">
-    <!-- 상단 바 -->
-    <div class="topbar">
-      <div class="left">
-        <span class="badge">🔒 보호된 회의</span>
-        <span class="room">회의: demo-room</span>
-      </div>
-      <div class="right">
-        <span class="badge">미리보기</span>
-      </div>
+  <div class="left">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="controls">
+      <button id="camBtn">📷 카메라 켜기</button>
+      <button id="micBtn">🎤 마이크 켜기</button>
     </div>
-
-    <!-- 메인 -->
-    <div class="main">
-      <div class="videoStage">
-        <!-- 여기에 실제 WebRTC 비디오 붙여도 됨. 지금은 프리뷰 배경 -->
-        <div class="fakeVideo" aria-label="Video stage placeholder"></div>
-
-        <!-- 🔹 TM 미니 위젯 -->
-        <div class="tm-mini" id="tmBox">
-          <div class="tm-head">
-            <b>Teachable Machine — Live Preview</b>
-            <button class="btn" id="toggleMic">🎙️ 마이크 켜기</button>
-          </div>
-          <div class="tm-body" id="tmBody">
-            <div style="color:#9fb3c8; font-size:13px; line-height:1.4">
-              마이크를 켜면 실시간으로 분류 결과가 표시됩니다.<br/>
-              (브라우저 권한 허용 필요)
-            </div>
-          </div>
-          <div class="tm-foot">
-            <div><span class="dot" id="micDot"></span><span id="micLabel">마이크 꺼짐</span></div>
-            <div id="modelStatus">모델: 로드 대기</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 우측 사이드(채팅·정보) -->
-      <aside class="sidebar">
-        <h3>회의 정보</h3>
-        <div class="chat">
-          <p>이 패널은 채팅/참가자/노트 등으로 자유 구성 가능합니다.</p>
-          <p>오른쪽 아래에 TM 미니 프리뷰가 구글 미트의 PiP처럼 뜨게 구성했습니다.</p>
-        </div>
-      </aside>
-    </div>
-
-    <!-- 하단 컨트롤 바 -->
-    <div class="bottombar">
-      <div class="ctrl">
-        <button class="btn">🎥 카메라</button>
-        <button class="btn">🎤 음소거</button>
-        <button class="btn danger">🔚 나가기</button>
-      </div>
-    </div>
+  </div>
+  <div class="right">
+    <iframe src="https://teachablemachine.withgoogle.com/models/gSHOySjax/"></iframe>
   </div>
 
   <script>
-    // ====== 설정 ======
-    // 🔗 당신이 준 모델 ID: gSHOySjax (Audio 프로젝트라고 가정)
-    const MODEL_DIR = "https://teachablemachine.withgoogle.com/models/gSHOySjax/";
-    // ===================
-
-    let classifier = null;
+    const video = document.getElementById('video');
+    const camBtn = document.getElementById('camBtn');
+    const micBtn = document.getElementById('micBtn');
+    let stream = null;
     let micOn = false;
-    let running = false;
-    let labelEls = [];   // {row, bar, pct}
-    let lastResult = [];
+    let camOn = false;
 
-    const tmBody = document.getElementById("tmBody");
-    const micDot = document.getElementById("micDot");
-    const micLabel = document.getElementById("micLabel");
-    const modelStatus = document.getElementById("modelStatus");
-    const toggleMicBtn = document.getElementById("toggleMic");
-
-    // 모델 로드
-    async function loadModel() {
-      modelStatus.textContent = "모델: 로딩 중...";
-      try {
-        // Teachable Machine Audio 모델은 soundClassifier 사용
-        classifier = await ml5.soundClassifier(MODEL_DIR + "model.json", { probabilityThreshold: 0.0 });
-        modelStatus.textContent = "모델: 로드 완료";
-        // 클래스(레이블) 목록 가져오기
-        const labels = (classifier && classifier.model && classifier.model.model && classifier.model.model.metadata && classifier.model.model.metadata.labels)
-          ? classifier.model.model.metadata.labels
-          : null;
-
-        if (!labels) {
-          // ml5가 메타데이터 경로가 다를 수 있으므로, 예측 한 번 호출 후 동적으로 그리기
-          buildRows(["class_1","class_2","class_3","..."]);
-        } else {
-          buildRows(labels);
-        }
-      } catch (err) {
-        console.error(err);
-        modelStatus.textContent = "모델: 로드 실패";
-        tmBody.innerHTML = `<div style="color:#ffb3b3">모델을 불러오지 못했습니다. URL을 확인하세요.<br/>(${MODEL_DIR}model.json)</div>`;
-      }
-    }
-
-    function buildRows(labels) {
-      tmBody.innerHTML = "";
-      labelEls = [];
-      labels.forEach(lab => {
-        const row = document.createElement("div");
-        row.className = "row";
-        const label = document.createElement("label");
-        label.textContent = lab;
-        const pct = document.createElement("div");
-        pct.className = "pct";
-        pct.textContent = "0.00";
-        const barWrap = document.createElement("div");
-        barWrap.className = "bar";
-        const bar = document.createElement("span");
-        barWrap.appendChild(bar);
-        row.appendChild(label);
-        row.appendChild(pct);
-        const full = document.createElement("div");
-        full.style.gridColumn = "1 / span 2";
-        full.appendChild(barWrap);
-        tmBody.appendChild(row);
-        tmBody.appendChild(full);
-        labelEls.push({label, pct, bar});
-      });
-    }
-
-    // 분류 콜백
-    function gotResult(err, results) {
-      if (err) { console.error(err); return; }
-      lastResult = results;
-      // results: [{label, confidence}, ...]
-      // label 목록이 사전에 없으면 동적으로 UI 재구성
-      if (labelEls.length !== results.length) {
-        buildRows(results.map(r => r.label));
-      }
-      // 막대 업데이트
-      results.forEach((r, i) => {
-        const p = Math.max(0, Math.min(1, r.confidence || 0)); // 0~1
-        labelEls[i].pct.textContent = (p * 100).toFixed(2) + "%";
-        labelEls[i].bar.style.width = (p * 100) + "%";
-      });
-    }
-
-    async function startClassify() {
-      if (!classifier || running) return;
-      running = true;
-      try {
-        // classify 시작
-        classifier.classify(gotResult);
-      } catch (e) {
-        console.error("classify 호출 실패:", e);
-        running = false;
-        tmBody.insertAdjacentHTML("afterbegin",
-          `<div style="color:#ffb3b3;margin-bottom:6px">classify()를 호출할 수 없습니다. 
-           모델 타입(오디오/이미지)을 확인하세요.</div>`);
-      }
-    }
-
-    function setMicState(on) {
-      micOn = on;
-      micDot.classList.toggle("on", on);
-      micLabel.textContent = on ? "마이크 켜짐" : "마이크 꺼짐";
-      toggleMicBtn.textContent = on ? "🛑 마이크 끄기" : "🎙️ 마이크 켜기";
-    }
-
-    toggleMicBtn.addEventListener("click", async () => {
-      if (!classifier) {
-        await loadModel();
-      }
-      if (!micOn) {
-        // 사용 권한 요청(오디오)
+    camBtn.addEventListener('click', async () => {
+      if (!camOn) {
         try {
-          await navigator.mediaDevices.getUserMedia({audio:true});
-          setMicState(true);
-          await startClassify();
-        } catch (e) {
-          console.error(e);
-          alert("마이크 권한을 허용해야 합니다.");
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: micOn });
+          video.srcObject = stream;
+          camOn = true;
+          camBtn.textContent = '📷 카메라 끄기';
+        } catch (err) {
+          alert('카메라 접근 실패: ' + err.message);
         }
       } else {
-        // ml5.soundClassifier는 내부에서 마이크 스트림을 관리하므로,
-        // 간단히 페이지 리로드/토글 메시지로 대체 (정교 제어가 필요하면 별도 구현)
-        setMicState(false);
-        location.reload();
+        if (stream) {
+          stream.getTracks().forEach(t => t.stop());
+          video.srcObject = null;
+        }
+        camOn = false;
+        camBtn.textContent = '📷 카메라 켜기';
       }
     });
 
-    // 첫 진입시 미리 모델 로드 시도(사용자 상호작용 뒤 권한 허용 필요)
-    loadModel();
+    micBtn.addEventListener('click', async () => {
+      micOn = !micOn;
+      micBtn.textContent = micOn ? '🔇 음소거' : '🎤 마이크 켜기';
+      micBtn.classList.toggle('muted', micOn);
+      if (camOn) {
+        // 이미 카메라 스트림이 있다면 트랙 다시 요청
+        stream.getTracks().forEach(t => t.stop());
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: micOn });
+        video.srcObject = stream;
+      }
+    });
   </script>
 </body>
 </html>
