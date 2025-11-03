@@ -145,12 +145,8 @@ def initialize_session_state():
     if daily_answers_from_file is not None:
         st.session_state.daily_answers = daily_answers_from_file
     else:
-        # 초기 답변 생성 로직 (파일이 없을 경우): 완전히 빈 리스트로 초기화하여 샘플 답변을 제거합니다.
+        # 초기 답변 생성 로직 (파일이 없을 경우): 완전히 빈 리스트로 초기화합니다.
         initial_answers = []
-
-        # 기존의 샘플 답변 생성 로직(윤슬조, 다효니 답변)은 삭제되었습니다.
-        # 데이터 로드 실패 시의 최소 샘플 답변("샘플1")도 제거하여 깨끗한 상태로 시작합니다.
-
         st.session_state.daily_answers = initial_answers
         # 초기 답변이 생성되면 파일에 저장 (최초 1회)
         save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
@@ -364,42 +360,87 @@ def show_daily_question():
     daily_q = "🤔 **'나와 전혀 다른 세대의 삶을 하루만 살아볼 수 있다면, 어떤 세대의 삶을 살아보고 싶은지 이유와 함께 알려주세요!'**"
     st.subheader(daily_q)
 
+    current_name = st.session_state.user_profile.get('name', '익명')
+    
     # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
     if st.session_state.daily_answers:
+        st.subheader("📝 다른 사람들의 답변")
         # 답변 순서는 이름순으로 정렬
         sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: x['name'], reverse=False)
 
-        for ans in sorted_answers:
-            with st.expander(f"[{ans['age_band']}] **{ans['name']}**님의 답변"):
-                st.write(ans['answer'])
+        for index, ans in enumerate(sorted_answers):
+            is_mine = ans['name'] == current_name
+            
+            # 1. 둥근 사각형 박스 안에 답변 표시
+            with st.container(border=True):
+                st.markdown(f"**👤 {ans['name']}** ([{ans['age_band']}])")
+                st.markdown(ans['answer'], unsafe_allow_html=True) # 답변 내용
 
+                if is_mine:
+                    # 2. 로그인한 사람의 답변에 수정/삭제 폼 추가
+                    st.divider()
+                    st.markdown("##### ✏️ 나의 답변 수정/삭제")
+                    
+                    # 수정을 위한 폼
+                    with st.form(f"edit_answer_form_{index}"):
+                        new_answer_text = st.text_area("답변 수정", value=ans['answer'], max_chars=500, height=100, key=f"edit_text_{index}")
+                        col_edit, col_delete = st.columns([1, 1])
+                        
+                        with col_edit:
+                            edit_submitted = st.form_submit_button("✅ 수정 완료")
+                        with col_delete:
+                            # 삭제는 버튼 하나만 누르면 바로 처리되도록 별도의 폼이 아닌 버튼으로 구성
+                            # Streamlit 폼 내부의 Submit 버튼 외에는 버튼 클릭 시 폼 제출 없이 바로 처리되도록 로직 구성
+                            pass # 삭제 버튼은 폼 외부에서 처리
+
+                    # 수정 로직
+                    if edit_submitted:
+                        st.session_state.daily_answers[st.session_state.daily_answers.index(ans)]['answer'] = new_answer_text
+                        save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                        st.success("답변이 성공적으로 **수정**되었습니다!")
+                        st.rerun()
+
+                    # 삭제 로직 (폼 바깥에 버튼 배치)
+                    if st.button("❌ 답변 삭제", key=f"delete_btn_{index}"):
+                        st.session_state.daily_answers.pop(st.session_state.daily_answers.index(ans))
+                        save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                        st.success("답변이 성공적으로 **삭제**되었습니다!")
+                        st.rerun()
+                
     st.divider()
 
-    # --- 답변 작성 폼 ---
-    st.subheader("나의 답변 작성하기")
-    current_name = st.session_state.user_profile.get('name', '익명')
-    current_age = st.session_state.user_profile.get('age_band', '미등록')
+    # --- 답변 작성 폼 (답변이 이미 있다면 수정 폼만 표시) ---
+    
+    # 현재 로그인한 사용자의 답변이 이미 있는지 확인
+    user_has_answered = any(ans['name'] == current_name for ans in st.session_state.daily_answers)
+    
+    if user_has_answered:
+        st.info("이미 답변을 작성하셨습니다. 답변 수정은 위에서 해주세요.")
+    else:
+        st.subheader("나의 답변 작성하기")
+        current_age = st.session_state.user_profile.get('age_band', '미등록')
 
-    with st.form("answer_form"):
-        answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
-        submitted = st.form_submit_button("답변 제출")
+        with st.form("answer_form"):
+            answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
+            submitted = st.form_submit_button("답변 제출")
 
-        if submitted:
-            if answer_text:
-                new_answer = {
-                    "name": current_name,
-                    "age_band": current_age,
-                    "answer": answer_text
-                }
-                st.session_state.daily_answers.append(new_answer)
+            if submitted:
+                if answer_text:
+                    new_answer = {
+                        "name": current_name,
+                        "age_band": current_age,
+                        "answer": answer_text
+                    }
+                    st.session_state.daily_answers.append(new_answer)
 
-                # 🌟 수정: 답변 데이터 영구 저장
-                save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                    # 🌟 수정: 답변 데이터 영구 저장
+                    save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
 
-                st.success("답변이 제출되었습니다. 페이지를 새로고침하면(R 키) 누적된 답변을 볼 수 있습니다.")
-                st.rerun()
-            else:
-                st.warning("답변 내용을 입력해 주세요.")
+                    # 3. 새로고침 후 재로그인 없이 새 답변이 보이도록 re-run
+                    st.success("답변이 제출되었습니다. 바로 위에서 답변을 확인하실 수 있습니다.")
+                    st.rerun()
+                else:
+                    st.warning("답변 내용을 입력해 주세요.")
 
 
 # --- 5. 메인 앱 실행 함수 (디버그 패널 포함) ---
