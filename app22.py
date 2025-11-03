@@ -361,7 +361,7 @@ def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
 
-    # 1. CSS 스타일 수정: 메뉴 버튼을 박스 안쪽 우측 상단으로 이동
+    # 1. CSS 스타일 수정: 메뉴 버튼 가시성 및 드롭다운 메뉴 글자색 개선
     st.markdown(f"""
         <style>
         /* 앱 전체 배경 강렬한 마젠타-퍼플 그라데이션 */
@@ -432,43 +432,50 @@ def show_daily_question():
             color: #333333 !important; 
             text-shadow: none;
         }}
-
-        /* 6. 수정/삭제 메뉴 버튼 (st.expander) 스타일 수정: 박스 안쪽 우측 상단으로 수직 정렬 */
-        /* st.expander가 생성하는 최상위 div를 타겟팅 (답변 박스 안에 위치) */
-        /* 각 답변 박스(.bubble-container) 내부에 위치할 Expander를 감싸는 컬럼 div를 타겟팅 */
         
-        /* Expander 컨테이너 자체를 박스 안 우측 상단으로 이동시키기 위해 래핑 컬럼의 위치를 사용합니다. */
+        /* 6. 수정/삭제 메뉴 버튼 (st.expander) 스타일 개선 */
+        
+        /* Expander 컨테이너 위치: 답변 박스 안 우측 상단 */
         div[data-testid^="stVerticalBlock"] > div > div[data-testid^="stExpander"] {{
-            position: absolute; /* 답변 박스(.bubble-container)를 기준으로 절대 위치 설정 */
-            top: 10px; /* 박스 상단으로부터의 간격 */
-            right: 15px; /* 박스 우측으로부터의 간격 */
-            width: auto; /* 너비 자동 설정 */
-            z-index: 100; /* 메뉴가 다른 요소 위로 보이도록 z-index 높이기 */
+            position: absolute; 
+            top: 10px; 
+            right: 15px; 
+            width: auto; 
+            z-index: 100; 
             margin: 0 !important;
         }}
 
-        /* st.expander의 버튼 부분 (타이틀 '...')을 수직으로 정렬 */
+        /* Expander 버튼 (⋮ 아이콘) 스타일: 가시성 확보 */
         div[data-testid^="stExpander"] > div[role="button"] {{
             padding: 5px; 
             background-color: transparent !important;
-            color: #000000 !important; /* 점 색상을 검은색으로 */
-            font-size: 1.5em; 
+            color: #000000 !important; /* 점 색상을 확실히 검은색으로 */
+            font-size: 1.8em; /* 폰트 사이즈 키워서 가시성 높이기 */
             cursor: pointer;
             z-index: 20;
+            line-height: 0.5; /* 수직 점이 잘 보이도록 줄 간격 조정 */
         }}
 
         /* Expander 컨텐츠 (Edit/Delete 버튼) 스타일 조정 */
         div[data-testid^="stExpander"] .stExpanderDetails {{
             position: absolute; 
-            right: 0px; /* 메뉴 버튼의 오른쪽 끝에 맞춤 */
-            top: 35px; /* 버튼 아래로 드롭다운 */
+            right: 0px; 
+            top: 35px; 
             background-color: #ffffff; 
             border: 1px solid #ccc;
             border-radius: 8px;
             padding: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            width: 120px; /* 메뉴 너비 조정 */
+            width: 120px; 
             z-index: 30;
+            color: #333333 !important; /* 드롭다운 메뉴의 기본 텍스트 색상을 어둡게 */
+        }}
+
+        /* 드롭다운 메뉴 내부 버튼의 글자 색상 (수정, 삭제 텍스트) 강제 지정 */
+        div[data-testid^="stExpander"] .stExpanderDetails button p,
+        div[data-testid^="stExpander"] .stExpanderDetails button span,
+        div[data-testid^="stExpander"] .stExpanderDetails button div {{
+            color: #333333 !important; /* 버튼 내부의 모든 텍스트 요소를 어둡게 */
         }}
         
         </style>
@@ -483,6 +490,7 @@ def show_daily_question():
         sorted_answers = st.session_state.daily_answers 
         current_name = st.session_state.user_profile.get('name')
         
+        # Streamlit의 컬럼 구조를 사용하여 답변을 3개씩 나열합니다.
         cols = st.columns(3)
         
         for i, ans in enumerate(sorted_answers):
