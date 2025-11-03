@@ -364,30 +364,45 @@ def show_daily_question():
     # 1. 디자인: 눈에 띄는 배경과 답변 풍선 효과를 위한 Custom CSS (전역 적용)
     st.markdown("""
         <style>
+        /* 1. Keyframes for Floating Effect (말풍선이 둥둥 떠다니는 애니메이션) */
+        @keyframes float {
+            0% {
+                transform: translate(0, 0px);
+                box-shadow: 0 5px 15px 0px rgba(0,0,0,0.06);
+            }
+            50% {
+                transform: translate(0, -8px); /* 위로 8px 이동 */
+                box-shadow: 0 25px 15px 0px rgba(0,0,0,0.1);
+            }
+            100% {
+                transform: translate(0, 0px);
+                box-shadow: 0 5px 15px 0px rgba(0,0,0,0.06);
+            }
+        }
+
         /* 앱 전체 배경색 변경 (눈에 띄게) */
         .stApp {
             background-color: #f7f9fc; /* 아주 연한 푸른색 계열 */
         }
         
-        /* 답변 컨테이너에 약간의 스타일 추가 (풍선이 둥둥 떠다니는 듯한 느낌) */
+        /* 2. 답변 컨테이너에 애니메이션 적용 (stExpander가 각 답변을 감싸는 요소) */
         .stExpander {
             border-radius: 12px;
-            /* 각 답변 컨테이너가 눈에 띄게 그림자 및 여백 추가 */
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); 
             background-color: #ffffff; 
-            margin-bottom: 12px;
-            /* 약간의 움직임 효과를 위해 hover 시 변형 */
-            transition: transform 0.2s ease-in-out;
-        }
-        .stExpander:hover {
-            transform: translateY(-3px);
+            margin-bottom: 20px; /* 아래 여백을 좀 더 줍니다. */
+            padding: 10px;
+            cursor: pointer;
+            
+            /* 애니메이션 적용 */
+            animation: float 4s ease-in-out infinite; /* 4초 동안 부드럽게 무한 반복 */
+            transition: all 0.2s; /* 부드러운 전환을 위해 추가 */
         }
         
         .stExpander > div > div:first-child {
             /* 헤더 부분 스타일 (클릭 영역) */
             background-color: #eef1f6;
             border-radius: 12px 12px 0 0;
-            padding: 10px;
+            padding: 15px 10px;
             font-weight: bold;
         }
         </style>
@@ -403,7 +418,7 @@ def show_daily_question():
         sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: x['name'], reverse=False)
 
         for ans in sorted_answers:
-            # 1. 디자인: 답변 하나 당 풍선 🎈 이모지 추가
+            # 풍선 🎈 이모지를 사용하여 말풍선 느낌 강조
             with st.expander(f"🎈 [{ans['age_band']}] **{ans['name']}**님의 답변"):
                 st.write(ans['answer'])
 
@@ -431,7 +446,7 @@ def show_daily_question():
                 save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
 
                 # 2. 기능: 새로고침 없이 바로 보이도록 st.rerun()을 사용하고 메시지를 명확히 함
-                st.success("답변이 성공적으로 제출되었습니다! 답변 목록에서 바로 확인할 수 있습니다.")
+                st.success("✅ 답변이 성공적으로 제출되었습니다! 이제 움직이는 답변 목록에서 바로 확인하실 수 있습니다.")
                 st.rerun() 
             else:
                 st.warning("답변 내용을 입력해 주세요.")
