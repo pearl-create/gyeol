@@ -205,18 +205,16 @@ def show_mentor_search_and_connect():
     # 전체 앱 배경은 그대로 두고, 이 페이지의 메인 콘텐츠 영역에만 배경 패턴 적용
     st.markdown("""
         <style>
-        /* 멘토 찾기 페이지 전용 배경 (어두운 푸른색 기하학적 패턴) */
+        /* 멘토 찾기 페이지 전용 배경 (따뜻한 오렌지-골드 그라데이션) */
         /* 이 CSS는 해당 함수가 호출될 때 적용되며, .main 영역에 영향을 줍니다. */
-        /* stApp 배경은 그대로 유지 */
         
         /* 멘토 찾기 페이지 전용 스타일 */
         [data-testid="stVerticalBlock"] > div:nth-child(1) {
-            background: linear-gradient(135deg, #0077B6 0%, #0096C7 100%);
+            /* 따뜻하고 편안한 오렌지/골드 그라데이션 적용 */
+            background: linear-gradient(135deg, #FFD700 0%, #FFA07A 100%); 
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            /* 기하학적 패턴 (선택 사항) */
-            /* background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cdefs%3E%3Cpattern id='p' width='10' height='10' patternUnits='userSpaceOnUse'%3E%3Cpath d='M0 0h10v10H0z' fill-opacity='0.1' fill='%23FFFFFF'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23p)'/%3E%3C/svg%3E"); */
         }
         
         /* 검색 폼 배경을 흰색으로 만들어 가독성 확보 */
@@ -230,7 +228,8 @@ def show_mentor_search_and_connect():
         /* 멘토 카드 컨테이너 스타일 */
         .stContainer {
             background-color: #f7f9fc !important; /* 연한 배경 */
-            border-left: 5px solid #0077B6 !important; /* 포인트 색상 */
+            /* 포인트 색상을 따뜻한 오렌지 계열로 변경 */
+            border-left: 5px solid #FF9800 !important; 
             border-radius: 8px;
             padding: 15px;
             margin-bottom: 15px;
@@ -242,7 +241,7 @@ def show_mentor_search_and_connect():
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
         }
 
-        /* 멘토 찾기 섹션의 모든 텍스트 색상을 대비되게 흰색으로 설정 */
+        /* 멘토 찾기 섹션의 모든 텍스트 색상을 대비되게 설정 */
         div.stVerticalBlock > div:nth-child(1) h1,
         div.stVerticalBlock > div:nth-child(1) h2,
         div.stVerticalBlock > div:nth-child(1) h3,
