@@ -131,7 +131,7 @@ def initialize_session_state():
     mentors_df = load_mentor_data()
     st.session_state.mentors_df = mentors_df
 
-    # 🌟 수정: 영구 저장된 사용자 데이터를 로드
+    # 영구 저장된 사용자 데이터를 로드
     st.session_state.all_users = load_json_data(USERS_FILE_PATH, {})
 
     if 'logged_in' not in st.session_state:
@@ -139,7 +139,7 @@ def initialize_session_state():
     if 'user_profile' not in st.session_state:
         st.session_state.user_profile = {}
 
-    # 🌟 수정: 영구 저장된 답변 데이터를 로드하거나, 없으면 초기 답변을 생성
+    # 영구 저장된 답변 데이터를 로드하거나, 없으면 초기 답변을 생성
     daily_answers_from_file = load_json_data(ANSWERS_FILE_PATH, None)
 
     if daily_answers_from_file is not None:
@@ -155,7 +155,7 @@ def initialize_session_state():
     if 'editing_index' not in st.session_state:
         st.session_state.editing_index = -1
         
-    # 🌟 추가: 삭제 확인 상태 (답변 인덱스)
+    # 삭제 확인 상태 (답변 인덱스)
     if 'confirming_delete_index' not in st.session_state:
         st.session_state.confirming_delete_index = -1 
 
@@ -277,7 +277,7 @@ def show_registration_form():
                 st.session_state.user_profile = user_profile_data
                 st.session_state.logged_in = True
 
-                # 🌟 수정: 사용자 데이터 영구 저장
+                # 사용자 데이터 영구 저장
                 save_json_data(st.session_state.all_users, USERS_FILE_PATH)
 
                 st.success(f"🎉 {name}님, 성공적으로 가입 및 로그인되었습니다!")
@@ -366,7 +366,7 @@ def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
 
-    # 1. CSS 스타일 수정: 가시성 및 디자인 문제 해결을 위한 집중 수정
+    # 1. CSS 스타일 수정: 사이드바 텍스트 흰색 복원 및 답변 박스 스타일 최종 수정
     st.markdown(f"""
         <style>
         /* 앱 전체 배경 강렬한 마젠타-퍼플 그라데이션 */
@@ -375,7 +375,7 @@ def show_daily_question():
             background-attachment: fixed;
         }}
 
-        /* Streamlit 기본 텍스트 색상 및 헤더 색상 조정 */
+        /* 메인 콘텐츠 영역 (헤더, 일반 텍스트) 흰색 유지 */
         h1, h2, h3, h4, h5, h6, .stMarkdown, .stSubheader, label {{
             color: #FFFFFF !important;
             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
@@ -383,42 +383,58 @@ def show_daily_question():
         div[data-testid="stText"] {{
              color: #EEEEEE !important;
         }}
-        /* 사이드바 텍스트 색상 */
-        /* '멘토 찾기'와 '오늘의 질문' 라디오 버튼을 제외한 모든 메뉴 글자를 검은색으로 변경 요청 */
-        .css-vk3ghm, .css-1dp54x6, .css-1aumw6k {{
-            color: #000000 !important; /* 검은색으로 변경 */
-            text-shadow: none !important; /* 검은색이므로 그림자 제거 */
+        
+        /* 1. 사이드바 텍스트 색상 흰색으로 복원 (요청 사항) */
+        /* '멘토 찾기'와 '오늘의 질문' 라디오 버튼을 포함한 모든 사이드바 텍스트를 흰색으로 통일 */
+        div[data-testid="stSidebarContent"] * {{
+            color: #FFFFFF !important; /* 모든 사이드바 콘텐츠를 흰색으로 */
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
         }}
-        /* 라디오 버튼 텍스트 색상만 흰색으로 다시 지정하여 '멘토 찾기'와 '오늘의 질문'이 잘 보이도록 유지 */
-        /* 이 선택자는 stSidebarContent 내부의 stRadio의 라벨과 내용을 타겟팅합니다. */
+        /* 라디오 버튼의 텍스트 색상도 흰색으로 복원 */
         div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label,
         div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label span,
         div[data-testid="stSidebarContent"] div[data-testid="stRadio"] label div {{
              color: #FFFFFF !important;
              text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
         }}
-        
+        /* 로그아웃 버튼 텍스트가 흰색으로 보이도록 추가 보장 */
+        .stButton button span {{
+             color: #FFFFFF !important;
+             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }}
+
+
         /* 2. 말풍선 컨테이너 (st.container) 스타일링 */
         .bubble-container {{
-            position: relative; /* 자식 요소 절대 위치의 기준 */
+            position: relative; 
             background: #ffffff; 
             border-radius: 1.5em; 
-            padding: 20px;
-            padding-bottom: 50px; /* 아이콘 버튼 공간 확보 */
-            min-height: 100px; /* 최소 높이 설정 */
+            padding: 25px 20px 20px 20px; /* 상단 패딩 늘림 */
+            min-height: 150px; 
             margin: 8px 0 5px 0; 
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
             transition: all 0.2s ease-in-out;
             border: 1px solid rgba(255, 255, 255, 0.8); 
         }}
         
-        /* 3. 답변 텍스트 스타일 개선 (가독성 향상) */
+        /* 2-1. 답변 정보 (나이대/이름) 스타일링 */
+        .bubble-info {{
+            font-size: 0.95em;
+            font-weight: bold;
+            color: #8A2BE2; /* 보라색 계열로 눈에 띄게 */
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f0f0f0; /* 정보와 답변 사이 구분선 */
+            margin-bottom: 10px;
+        }}
+        
+        /* 3. 답변 텍스트 스타일 개선 */
         .bubble-answer {{
             font-size: 1.1em;
             line-height: 1.6;
             color: #333333;
             margin-top: 5px; 
-            font-weight: 500; /* 미세하게 굵게 조정 */
+            font-weight: 500;
+            padding-right: 50px; /* 버튼 공간 확보 */
         }}
         
         /* 4. 폼 배경색을 흰색으로 설정하여 가독성 높임 */
@@ -433,53 +449,53 @@ def show_daily_question():
             text-shadow: none;
         }}
 
-        /* 5. 수정/삭제 아이콘 버튼 스타일링 (흰색 네모 제거 및 위치 조정) */
+        /* 5. 수정/삭제 아이콘 버튼 스타일링 (최종 위치 및 디자인) */
         
-        /* **추가:** 실제 Streamlit 버튼(disabled 상태)을 화면에서 완전히 숨깁니다. 
-           이것이 이전 요청에서 발생했던 동그라미/네모의 원인입니다. */
+        /* 실제 Streamlit 버튼(disabled 상태 포함)을 화면에서 완전히 숨깁니다. */
+        div[data-testid^="stColumn"] > div > div > button[kind="secondary"],
         div[data-testid^="stColumn"] > div > div > button[kind="secondary"][disabled] {{
              display: none !important;
         }}
 
         /* HTML 마크다운으로 삽입된 아이콘 버튼 컨테이너 스타일링 */
         .action-button-wrapper button {{
-            background-color: transparent !important; /* 배경 투명 */
-            border: none !important; /* 테두리 제거 */
-            box-shadow: none !important; /* 그림자 제거 */
-            color: #8A2BE2 !important; /* 아이콘 색상 (보라색 계열) */
-            font-size: 1.3em; /* 아이콘 크기 약간 키움 */
+            background-color: transparent !important; 
+            border: none !important; 
+            box-shadow: none !important; 
+            color: #8A2BE2 !important; 
+            font-size: 1.3em; 
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 5px; /* 클릭 영역 확보 */
-            position: absolute; /* 절대 위치 */
+            padding: 5px; 
+            position: absolute; 
             cursor: pointer;
-            
-            /* 마우스를 올렸을 때 나타나는 효과 */
             transition: all 0.2s ease-in-out;
-            opacity: 0.7; /* 평소에는 살짝 투명하게 */
+            opacity: 0.7; 
+            z-index: 10; /* 다른 요소 위에 표시 */
         }}
         
         .action-button-wrapper button:hover {{
-            color: #FF69B4 !important; /* 호버 시 색상 변경 (핫핑크) */
-            background-color: transparent !important;
-            opacity: 1; /* 호버 시 불투명하게 */
-            transform: scale(1.1); /* 호버 시 약간 확대 */
+            color: #FF69B4 !important; 
+            opacity: 1; 
+            transform: scale(1.1); 
             box-shadow: none !important;
         }}
         
         /* 개별 아이콘 버튼 위치 조정 */
         /* 수정 아이콘 */
         .edit-icon {{
-            bottom: 15px; /* 하단에서 15px 위로 */
+            top: 20px; /* 상단에서 20px 아래로 (정보 영역 옆) */
             right: 50px; /* 오른쪽에서 50px 안쪽으로 */
+            font-size: 1.1em; /* 크기 약간 줄임 */
         }}
         /* 삭제 아이콘 */
         .delete-icon {{
-            bottom: 15px; /* 하단에서 15px 위로 */
-            right: 15px; /* 오른쪽에서 15px 안쪽으로 */
+            top: 20px; /* 상단에서 20px 아래로 */
+            right: 20px; /* 오른쪽에서 20px 안쪽으로 */
+            font-size: 1.1em; /* 크기 약간 줄임 */
         }}
-
+        
         </style>
     """, unsafe_allow_html=True)
 
@@ -501,21 +517,11 @@ def show_daily_question():
                 # ------------------- 📌 중요: 소유자 체크 --------------------
                 is_owner = (ans['name'] == current_name)
                 
-                # ------------------- 이름, 나이대 정보 표시 -------------------
-                st.markdown(
-                    f"""
-                    <div style="font-size: 1em; font-weight: bold; color: #FFFFFF; padding-bottom: 8px;">
-                        [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
-                    </div>
-                    """, 
-                    unsafe_allow_html=True
-                )
-                
                 # ---------------------- 수정/삭제/일반 표시 모드 ----------------------
                 if st.session_state.editing_index == i:
                     # 수정 모드일 때는 일반 말풍선 대신 수정 폼을 표시합니다.
                     with st.form(f"edit_form_{i}", clear_on_submit=False):
-                        st.markdown(f"**답변 수정 [{ans['age_band']}]**", unsafe_allow_html=True)
+                        st.markdown(f"**답변 수정 [{ans['age_band']}] {ans['name']}**", unsafe_allow_html=True)
                         edited_text = st.text_area("수정 내용", ans['answer'], height=100, key=f"edit_text_{i}")
                         col_save, col_cancel = st.columns(2)
                         
@@ -558,13 +564,15 @@ def show_daily_question():
                     st.markdown(
                         f"""
                         <div class='bubble-container'>
+                            <div class='bubble-info'>
+                                [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
+                            </div>
                             <p class='bubble-answer'>
                                 {ans['answer']}
                             </p>
                             
                             {
                                 # ---------------------- 수정/삭제 아이콘 버튼 (소유자에게만) ----------------------
-                                # Streamlit 버튼 대신 HTML 버튼을 사용하고, CSS로 위치를 제어합니다.
                                 '''
                                 <div class="action-button-wrapper">
                                     <button class="edit-icon" 
@@ -584,7 +592,6 @@ def show_daily_question():
                     )
                     
                     # ---------------------- 실제 Streamlit 버튼 (숨겨짐) ----------------------
-                    # 이 버튼은 위에 있는 HTML 버튼의 클릭 이벤트를 받아서 Python 로직을 실행하는 역할만 합니다.
                     if is_owner:
                         # 클릭 시 수정 모드로 전환
                         if st.button("✏️", key=f"edit_btn_{i}", help="답변 수정", use_container_width=False, type="secondary"):
@@ -619,7 +626,7 @@ def show_daily_question():
                 }
                 st.session_state.daily_answers.append(new_answer)
 
-                # 🌟 수정: 답변 데이터 영구 저장
+                # 답변 데이터 영구 저장
                 save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
 
                 st.success("✅ 답변이 성공적으로 제출되었습니다! 이제 목록에서 바로 확인하실 수 있습니다.")
