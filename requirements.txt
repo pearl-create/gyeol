@@ -1,12 +1,17 @@
-# 기존
+# [Streamlit UI 및 기본 데이터 처리]
 streamlit==1.39.0
 pandas==2.2.2
 scikit-learn==1.5.2
 numpy==1.26.4
 
-# 오디오 분류 + WebRTC
-pip install streamlit-webrtc
+# [TFLite 모델 실행 및 오디오 처리]
+# tflite-support 대신 가벼운 tflite-runtime을 사용할 수도 있습니다.
+# 모델 전처리 로직에 따라 tflite-support나 tflite-runtime 중 하나를 선택하세요.
+tflite-support==0.4.3
+librosa
+
+# [실시간 마이크 입력 (WebRTC)]
+streamlit-webrtc
 aiortc==1.9.0
 av==12.3.0
-tflite-support==0.4.3
 pydub==0.25.1
