@@ -460,14 +460,7 @@ def show_daily_question():
 
         /* 5. 수정/삭제 버튼 스타일링 및 위치 지정 (우측 하단) */
         
-        /* 📌 이 부분이 핵심 수정입니다. stButton을 포함하는 모든 div를 숨깁니다. */
         /* Streamlit 버튼(type="secondary" 사용)이 포함된 모든 컨테이너를 숨깁니다. */
-        /* 이는 st.columns 외부에서 생성된 버튼이나, 숨겨지지 않은 버튼들을 모두 포함합니다. */
-        div[data-testid^="stVerticalBlock"] > div > div > button[kind="secondary"],
-        div[data-testid^="stColumn"] > div > div > button[kind="secondary"],
-        div[data-testid^="stVerticalBlock"] > div > div > button[kind="secondary"][disabled],
-        div[data-testid^="stColumn"] > div > div > button[kind="secondary"][disabled],
-        /* 💡 추가: 버튼이 포함된 상위 div까지 숨기도록 선택자 수정 */
         div[data-testid^="stVerticalBlock"] > div > div:has(button[kind="secondary"]),
         div[data-testid^="stColumn"] > div > div:has(button[kind="secondary"]) {{
             display: none !important;
@@ -539,18 +532,17 @@ def show_daily_question():
         sorted_answers = st.session_state.daily_answers 
         current_name = st.session_state.user_profile.get('name')
         
-        # 📌 수정: st.columns(3)을 사용하여 답변을 나열합니다.
-        cols = st.columns(3)
+        # 📌 수정된 로직: st.columns(3)을 제거하고, 답변 하나씩 수직으로 배치합니다.
+        # 이렇게 하면 모든 답변이 누락 없이 순서대로 표시됩니다.
         
         for i, ans in enumerate(sorted_answers):
-            # 답변 하나당 하나의 컬럼 컨테이너에 들어갑니다.
-            with cols[i % 3]: 
-                # ------------------- 📌 중요: 소유자 체크 --------------------
-                is_owner = (ans['name'] == current_name)
-                
-                # ---------------------- 수정/삭제/일반 표시 모드 ----------------------
-                if st.session_state.editing_index == i:
-                    # 수정 모드일 때는 일반 말풍선 대신 수정 폼을 표시합니다.
+            # ------------------- 📌 중요: 소유자 체크 --------------------
+            is_owner = (ans['name'] == current_name)
+            
+            # ---------------------- 수정/삭제/일반 표시 모드 ----------------------
+            if st.session_state.editing_index == i:
+                # 수정 모드일 때는 일반 말풍선 대신 수정 폼을 표시합니다.
+                with st.container(border=True):
                     with st.form(f"edit_form_{i}", clear_on_submit=False):
                         st.markdown(f"**답변 수정 [{ans['age_band']}] {ans['name']}**", unsafe_allow_html=True)
                         edited_text = st.text_area("수정 내용", ans['answer'], height=100, key=f"edit_text_{i}")
@@ -572,9 +564,10 @@ def show_daily_question():
                                 st.session_state.editing_index = -1
                                 st.session_state.confirming_delete_index = -1
                                 st.rerun()
-                
-                elif st.session_state.confirming_delete_index == i:
-                    # 삭제 확인 메시지 표시
+            
+            elif st.session_state.confirming_delete_index == i:
+                # 삭제 확인 메시지 표시
+                with st.container(border=True):
                     st.warning(f"정말로 답변을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.", icon="⚠️")
                     col_confirm, col_cancel = st.columns(2)
                     with col_confirm:
@@ -589,10 +582,10 @@ def show_daily_question():
                         if st.button("❌ 취소", key=f"cancel_delete_{i}", use_container_width=True):
                             st.session_state.confirming_delete_index = -1 # 삭제 상태 해제
                             st.rerun()
-                
-                else:
-                    # 답변 텍스트 버블 표시
-                    
+            
+            else:
+                # 답변 텍스트 버블 표시
+                with st.container(): # 각 답변을 독립적인 컨테이너로 감싸서 레이아웃을 안전하게 유지
                     action_buttons_html = f"""
                         <div class="action-button-wrapper">
                             <button class="edit-button" 
