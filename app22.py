@@ -413,8 +413,7 @@ def show_daily_question():
         .bubble-info {{
             font-size: 1em; 
             font-weight: bold; 
-            color: #6A0DAD; /* 이름 정보를 퍼플 계열로 강조 */
-            border-bottom: 1px solid rgba(0,0,0,0.1); 
+            color: #9400D3; /* 이름 정보를 이미지에 맞춰 더 진한 퍼플 계열로 강조 */
             padding-bottom: 8px;
             margin-bottom: 12px;
             position: absolute; /* 옵션 버튼과 겹치지 않도록 절대 위치 지정 */
@@ -434,43 +433,45 @@ def show_daily_question():
             text-shadow: none;
         }}
 
-        /* 6. 수정/삭제 메뉴 버튼 (점 세 개 역할) 스타일: 답변 박스 오른쪽 상단에 위치시키기 */
+        /* 6. 수정/삭제 메뉴 버튼 (점 세 개 역할) 스타일: 요청 이미지에 맞춰 박스 외부 상단 오른쪽으로 이동 */
         /* st.expander가 생성하는 최상위 div를 타겟팅 */
         div[data-testid^="stExpander"] {{
-            /* st.expander를 .bubble-container의 영역으로 끌어올리기 위해 마진 조정 */
-            margin-top: -65px !important; 
-            margin-bottom: 0px !important; 
-            /* 내부에서 절대 위치를 사용하므로 z-index는 높게 유지 */
-            z-index: 10; 
+            /* Expander 컨테이너 자체를 컬럼의 최상단 오른쪽으로 끌어올림 */
+            position: relative;
+            z-index: 10;
+            margin-top: -100px !important; /* 충분히 위로 올림 */
+            margin-bottom: -10px !important; /* 아래 공간 줄이기 */
         }}
         
         /* st.expander의 버튼 부분 (타이틀 '...')을 오른쪽 상단에 고정 */
         div[data-testid^="stExpander"] > div[role="button"] {{
             position: absolute;
-            top: 20px; /* .bubble-container의 상단에서 20px 아래로 배치 */
-            right: 20px; /* 오른쪽에서 20px 간격으로 배치 */
+            top: 0px; 
+            right: 0px; 
+            /* 이미지와 유사하게 박스 모서리 바깥쪽으로 미세 조정 */
+            transform: translate(15px, 2px); 
+            
             padding: 5px; 
             background-color: transparent !important;
-            color: #6A0DAD !important; /* 점 색상을 보라색으로 */
-            font-size: 1.5em; /* 점 세 개 아이콘 크기 */
-            text-align: right;
-            border-radius: 50%;
+            color: #000000 !important; /* 점 색상을 검은색으로 */
+            font-size: 1.5em; 
             cursor: pointer;
-            width: auto; /* 너비를 내용에 맞게 조정 */
+            z-index: 20;
         }}
 
         /* Expander 컨텐츠 (Edit/Delete 버튼) 스타일 조정 */
         div[data-testid^="stExpander"] .stExpanderDetails {{
-            position: absolute; /* 버튼 아래로 드롭다운 메뉴 위치 */
+            position: absolute; 
             right: 20px; 
-            top: 45px; /* 버튼 바로 아래로 드롭다운 */
+            top: 30px; /* 버튼 아래로 드롭다운 */
             background-color: #ffffff; 
             border: 1px solid #ccc;
             border-radius: 8px;
             padding: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
             width: 150px;
-            z-index: 20;
+            z-index: 30; /* 더 높게 설정 */
+            transform: translateX(10px); /* 오른쪽으로 조금 밀어서 메뉴가 점 옆에 오도록 조정 */
         }}
 
         </style>
@@ -536,7 +537,7 @@ def show_daily_question():
                     # 소유자에게만 수정/삭제 메뉴 표시 (점 세 개 역할)
                     if is_owner:
                         # Streamlit Expander를 점 세 개 메뉴처럼 사용하여 옵션 제공
-                        # 레이블을 '...'로 줄이고 CSS로 위치를 조정하여 말풍선 안에 있는 것처럼 보이게 합니다.
+                        # 레이블을 '...'로 줄이고 CSS로 위치를 조정하여 말풍선 밖에 있는 것처럼 보이게 합니다.
                         with st.expander("...", expanded=False): 
                             col_e, col_d = st.columns(2)
                             
