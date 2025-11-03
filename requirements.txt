@@ -5,7 +5,7 @@ scikit-learn==1.5.2
 numpy==1.26.4
 
 # 오디오 분류 + WebRTC
-streamlit-webrtc==0.47.7
+pip install streamlit-webrtc
 aiortc==1.9.0
 av==12.3.0
 tflite-support==0.4.3
