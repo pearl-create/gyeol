@@ -1,12 +1,4 @@
-# 기본 패키지
-streamlit==1.38.0
-pandas>=2.2
-# numpy 버전을 낮춥니다. (TensorFlow와의 호환성 확보)
-numpy==1.24.4
-scikit-learn>=1.4
-
-# 실시간 오디오/영상 스트림용
-streamlit-webrtc
-
-# TFLite 모델 실행용 (클라우드 환경에서 안정적인 버전 명시)
-tensorflow==2.16.1
+streamlit>=1.37.0
+pandas>=2.0.0
+scikit-learn>=1.4.0
+numpy>=1.26.0
