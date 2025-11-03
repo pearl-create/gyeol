@@ -4,7 +4,7 @@ import random
 import time
 import os
 import json 
-import html # 👈 새로 추가: 텍스트 이스케이프용
+import html # 텍스트 이스케이프용
 
 # --- 1. 데이터 로드 및 상수 정의 ---
 
@@ -373,26 +373,34 @@ def show_daily_question():
     # 📌 배경색 및 버블 스타일 CSS 적용
     st.markdown("""
         <style>
-        /* 앱 전체 배경 (눈에 띄는 블루-마젠타 그라데이션으로 변경) */
+        /* 앱 전체 배경 (은은한 노랑-민트 그라데이션) */
         .stApp {
-            background: linear-gradient(135deg, #00C6FF 0%, #EE24E7 100%); 
+            background: linear-gradient(135deg, #FFD700 0%, #00FFFF 100%); 
             background-attachment: fixed;
         }
 
-        /* 메인 콘텐츠 영역 (헤더, 일반 텍스트) 흰색 유지 */
-        h1, h2, h3, h4, h5, h6, .stMarkdown, .stSubheader, label, 
-        /* st.info/warning 내 텍스트 색상도 보정 */
-        div[data-testid^="stAlert"] * {
-            color: #FFFFFF !important;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+        /* 사이드바 배경 (짙은 파랑 계열로 대비) */
+        [data-testid="stSidebar"] {
+            background-color: #004D7A !important; 
+            background-image: none !important;
         }
-        /* 사이드바 텍스트 색상 흰색으로 복원 */
+
+        /* 메인 콘텐츠 영역 텍스트 색상 (짙은 색으로 가독성 확보) */
+        h1, h2, h3, h4, h5, h6, 
+        /* 일반 텍스트는 흰색 배경 위에 잘 보이도록 짙은 색으로 */
+        .stMarkdown, .stSubheader, label, 
+        div[data-testid^="stAlert"] * {
+            color: #1F2937 !important; /* Tailwind CSS gray-800 */
+            text-shadow: none; /* 그림자 제거 */
+        }
+        
+        /* 사이드바 텍스트 색상 (흰색으로 유지) */
         div[data-testid="stSidebarContent"] * {
             color: #FFFFFF !important;
             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
         }
         div[data-testid="stText"] {
-             color: #EEEEEE !important;
+             color: #1F2937 !important;
         }
         
         /* 버블 컨테이너 스타일 (둥근 사각형) */
