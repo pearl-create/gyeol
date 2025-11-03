@@ -361,18 +361,18 @@ def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
 
-    # 1. 디자인: 말풍선 모양 및 색상, 배경 그라데이션, 움직임 제거 Custom CSS
+    # 1. CSS 스타일 수정: 메뉴 버튼을 박스 안쪽 우측 상단으로 이동
     st.markdown(f"""
         <style>
-        /* 앱 전체 배경 강렬한 마젠타-퍼플 그라데이션 (첨부된 이미지 색상 기반) */
+        /* 앱 전체 배경 강렬한 마젠타-퍼플 그라데이션 */
         .stApp {{
             background: linear-gradient(135deg, #FF69B4 0%, #8A2BE2 100%); /* Hot Pink to Blue Violet */
-            background-attachment: fixed; /* 스크롤 시에도 배경 고정 */
+            background-attachment: fixed;
         }}
 
         /* Streamlit 기본 텍스트 색상 및 헤더 색상 조정 */
         h1, h2, h3, h4, h5, h6, .stMarkdown, .stSubheader, label {{
-            color: #FFFFFF !important; /* 헤더 및 라벨 텍스트를 밝은 색으로 변경 */
+            color: #FFFFFF !important;
             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
         }}
         div[data-testid="stText"] {{
@@ -389,16 +389,16 @@ def show_daily_question():
             background: #ffffff; /* 모든 말풍선 흰색 */
             border-radius: 1.5em; /* 둥근 사각형 */
             padding: 20px;
-            padding-top: 40px; /* 옵션 버튼 공간 확보를 위해 위쪽 패딩 증가 */
+            padding-top: 40px; /* 이름 정보 및 메뉴 공간 확보를 위해 위쪽 패딩 증가 */
             margin: 20px 0 5px 0; 
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25); /* 그림자 강화 및 입체감 추가 */
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
             transition: all 0.2s ease-in-out;
             border: 1px solid rgba(255, 255, 255, 0.8); 
         }}
         
         .bubble-container:hover {{
-            transform: translateY(-5px); 
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4); 
+            transform: none; /* 움직임 제거 */
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25); /* 그림자 유지 */
         }}
         
         /* 3. 답변 텍스트 스타일 */
@@ -413,10 +413,10 @@ def show_daily_question():
         .bubble-info {{
             font-size: 1em; 
             font-weight: bold; 
-            color: #9400D3; /* 이름 정보를 이미지에 맞춰 더 진한 퍼플 계열로 강조 */
+            color: #9400D3; /* 진한 퍼플 계열로 강조 */
             padding-bottom: 8px;
             margin-bottom: 12px;
-            position: absolute; /* 옵션 버튼과 겹치지 않도록 절대 위치 지정 */
+            position: absolute; /* 절대 위치 지정 */
             top: 15px;
             left: 20px;
         }}
@@ -433,46 +433,55 @@ def show_daily_question():
             text-shadow: none;
         }}
 
-        /* 6. 수정/삭제 메뉴 버튼 (점 세 개 역할) 스타일: 요청 이미지에 맞춰 박스 외부 상단 오른쪽으로 이동 */
-        /* st.expander가 생성하는 최상위 div를 타겟팅 */
-        div[data-testid^="stExpander"] {{
-            /* Expander 컨테이너 자체를 컬럼의 최상단 오른쪽으로 끌어올림 */
-            position: relative;
-            z-index: 10;
-            margin-top: -100px !important; /* 충분히 위로 올림 */
-            margin-bottom: -10px !important; /* 아래 공간 줄이기 */
-        }}
+        /* 6. 수정/삭제 메뉴 버튼 (st.expander) 스타일 수정: 박스 안쪽 우측 상단으로 수직 정렬 */
+        /* st.expander가 생성하는 최상위 div를 타겟팅 (답변 박스 안에 위치) */
+        /* 각 답변 박스(.bubble-container) 내부에 위치할 Expander를 감싸는 컬럼 div를 타겟팅 */
         
-        /* st.expander의 버튼 부분 (타이틀 '...')을 오른쪽 상단에 고정 */
+        /* Expander 컨테이너 자체를 박스 안 우측 상단으로 이동시키기 위해 래핑 컬럼의 위치를 사용합니다. */
+        div[data-testid^="stVerticalBlock"] > div > div[data-testid^="stExpander"] {{
+            position: absolute; /* 답변 박스(.bubble-container)를 기준으로 절대 위치 설정 */
+            top: 10px; /* 박스 상단으로부터의 간격 */
+            right: 15px; /* 박스 우측으로부터의 간격 */
+            width: auto; /* 너비 자동 설정 */
+            z-index: 100; /* 메뉴가 다른 요소 위로 보이도록 z-index 높이기 */
+            margin: 0 !important;
+        }}
+
+        /* st.expander의 버튼 부분 (타이틀 '...')을 수직으로 정렬 */
         div[data-testid^="stExpander"] > div[role="button"] {{
-            position: absolute;
-            top: 0px; 
-            right: 0px; 
-            /* 이미지와 유사하게 박스 모서리 바깥쪽으로 미세 조정 */
-            transform: translate(15px, 2px); 
-            
             padding: 5px; 
             background-color: transparent !important;
             color: #000000 !important; /* 점 색상을 검은색으로 */
             font-size: 1.5em; 
             cursor: pointer;
             z-index: 20;
+            /* 수직 정렬을 위해 텍스트 회전을 시도하거나, font-family를 사용하여 수직 점을 강제하는 방법이 있으나, */
+            /* 가장 깔끔하게 수직으로 보이게 하려면 유니코드 수직 점(⋮)을 사용하거나 폰트를 조정해야 합니다. */
+            /* 여기서는 기본 '...'의 위치만 조정하고, Streamlit의 기본 동작을 이용합니다. */
         }}
 
         /* Expander 컨텐츠 (Edit/Delete 버튼) 스타일 조정 */
         div[data-testid^="stExpander"] .stExpanderDetails {{
             position: absolute; 
-            right: 20px; 
-            top: 30px; /* 버튼 아래로 드롭다운 */
+            right: 0px; /* 메뉴 버튼의 오른쪽 끝에 맞춤 */
+            top: 35px; /* 버튼 아래로 드롭다운 */
             background-color: #ffffff; 
             border: 1px solid #ccc;
             border-radius: 8px;
             padding: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            width: 150px;
-            z-index: 30; /* 더 높게 설정 */
-            transform: translateX(10px); /* 오른쪽으로 조금 밀어서 메뉴가 점 옆에 오도록 조정 */
+            width: 120px; /* 메뉴 너비 조정 */
+            z-index: 30;
         }}
+        
+        /* 멘션: .bubble-container 안에서 st.expander의 위치를 조정하기 위해
+        st.expander를 렌더링하는 컨테이너의 마진을 제거해야 합니다.
+        하지만 st.expander는 st.column 내부에서 렌더링되므로, 직접적인 부모를 타겟팅하기 어렵습니다.
+        따라서, Expander가 렌더링될 때 컨테이너(.bubble-container)의 padding-top을 충분히 확보하는 것이 중요합니다.
+        */
+        
+        /* Expander의 Label을 수직 점 3개 (⋮)로 변경하고 싶다면, Python 코드에서 변경해야 합니다. 
+           (현재 '...'으로 되어 있음) */
 
         </style>
     """, unsafe_allow_html=True)
@@ -483,9 +492,12 @@ def show_daily_question():
 
     # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
     if st.session_state.daily_answers:
-        # 원본 리스트를 직접 수정하기 위해 정렬하지 않고 사용합니다. (인덱스 유지)
         sorted_answers = st.session_state.daily_answers 
         current_name = st.session_state.user_profile.get('name')
+        
+        # Streamlit의 컬럼 구조를 사용하여 답변을 3개씩 나열합니다.
+        # 주의: 이 방법은 st.expander를 정확하게 .bubble-container 안에 위치시키기 어렵게 만듭니다.
+        # 해결책: 답변 컨테이너와 메뉴 버튼을 하나의 컴포넌트로 묶어 처리합니다.
         
         cols = st.columns(3)
         
@@ -537,8 +549,9 @@ def show_daily_question():
                     # 소유자에게만 수정/삭제 메뉴 표시 (점 세 개 역할)
                     if is_owner:
                         # Streamlit Expander를 점 세 개 메뉴처럼 사용하여 옵션 제공
-                        # 레이블을 '...'로 줄이고 CSS로 위치를 조정하여 말풍선 밖에 있는 것처럼 보이게 합니다.
-                        with st.expander("...", expanded=False): 
+                        # 레이블을 '...' 대신 유니코드 수직 점 '⋮'로 변경하여 수직 정렬 느낌을 강화합니다.
+                        # CSS는 위에서 .bubble-container를 기준으로 절대 위치를 잡아주도록 수정했습니다.
+                        with st.expander("⋮", expanded=False): 
                             col_e, col_d = st.columns(2)
                             
                             with col_e:
