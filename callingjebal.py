@@ -1,109 +1,72 @@
-python callingjebal.py
-import numpy as np
-import time
-import sys
-# TensorFlow Lite Task Library의 오디오 분류 모듈 임포트
-try:
-    from tflite_support.task import audio
-    from tflite_support.task import core
-    from tflite_support.task import processor
-except ImportError:
-    print("오류: 'tflite-support' 라이브러리가 설치되지 않았습니다.")
-    print("터미널/CMD에서 다음 명령어를 실행하여 설치하세요: pip install tflite-support sounddevice numpy")
-    sys.exit(1)
+# app.py (핵심 부분 수정)
+from tflite_support.task import audio
+from tflite_support.task import core
 
-# --- 설정 변수 ---
-# 사용자가 올린 TFLite 모델 파일 이름
-MODEL_PATH = 'soundclassifier_with_metadata.tflite'
-# 추론(Inference) 결과를 출력할 최소 확률 임계값 (예: 50% 미만은 무시)
-PROBABILITY_THRESHOLD = 0.01  
-# 실시간 감지하려는 특정 단어 (labels.txt에 있는 단어여야 함)
-TARGET_LABEL = "아이씨" 
-# 감지 결과를 화면에 얼마나 자주 업데이트할지 (초 단위)
-UPDATE_INTERVAL_SEC = 0.5 
-# ------------------
+# 모델 및 라벨 파일 경로 (GitHub 저장소의 루트 경로에 있다고 가정)
+TFLITE_MODEL_PATH = "soundclassifier_with_metadata.tflite"
+LABELS_PATH = "labels.txt" # 이 파일에는 '0 깔라만씨\n1 배경 소음\n...' 와 같이 있어야 합니다.
 
-def run_audio_classification():
-    """마이크 입력을 받아 TFLite 모델로 실시간 음성 분류를 수행합니다."""
+# 모델 로드 및 분류기 초기화
+@st.cache_resource
+def load_classifier(model_path):
+    # TFLite Task Library의 AudioClassifier를 사용하여 모델 로드
+    base_options = core.BaseOptions(file_name=model_path)
+    options = audio.AudioClassifierOptions(base_options=base_options, max_results=4)
+    classifier = audio.AudioClassifier.create_from_options(options)
     
-    print("=" * 50)
-    print(f"✨ TFLite 모델을 이용한 실시간 음성 분류 시스템")
-    print(f"🚀 대상 모델: {MODEL_PATH}")
-    print(f"🎯 특정 감지 단어: '{TARGET_LABEL}'")
-    print("=" * 50)
+    # 모델의 샘플링 레이트와 버퍼 크기 등을 메타데이터에서 얻을 수 있습니다.
+    # classifier.get_required_sample_rate()
+    # classifier.get_required_input_buffer_size()
+    
+    return classifier
 
-    try:
-        # 1. 모델 옵션 설정 및 분류기 생성
-        base_options = core.BaseOptions(file_name=MODEL_PATH)
-        # 분류 옵션: 최소 임계값 설정
-        options = audio.AudioClassifierOptions(
-            base_options=base_options,
-            classification_options=processor.ClassificationOptions(
-                score_threshold=PROBABILITY_THRESHOLD
-            )
+# TFLiteAudioProcessor 클래스 수정
+class TFLiteAudioProcessor(AudioProcessorBase):
+    def __init__(self, classifier):
+        self.classifier = classifier
+        # 모델이 요구하는 길이만큼 오디오 데이터를 모으기 위한 버퍼
+        self.audio_record = audio.AudioData.create_from_array(
+            np.zeros(classifier.get_required_input_buffer_size()), 
+            classifier.get_required_sample_rate()
         )
-        classifier = audio.AudioClassifier.create_from_options(options)
-    
-    except Exception as e:
-        print(f"❌ 모델 로드 중 오류 발생: {e}")
-        print("💡 힌트: 파일 이름이 정확한지, 라이브러리가 모두 설치되었는지 확인하세요.")
-        return
+        self.result = "대기 중..."
 
-    # 2. 오디오 입력 설정 및 녹음 시작
-    input_buffer_size = classifier.required_input_buffer_size
-    audio_record = classifier.create_audio_record()
+    def recv(self, frame):
+        # 1. WebRTC 프레임을 numpy 배열로 변환
+        audio_array = frame.to_ndarray(format="s16le")
+        
+        # 2. 버퍼에 현재 프레임의 오디오 데이터를 추가 (tflite-support 활용)
+        # WebRTC 스트림의 샘플 레이트가 모델과 다르면 리샘플링이 필요합니다.
+        # (AudioData 클래스가 내부적으로 처리할 수 있도록 코드를 작성해야 합니다)
 
-    try:
-        audio_record.start_recording()
-        print("\n✅ 마이크 녹음 및 실시간 감지 시작됨...")
-        print("    마이크에 대고 '아이씨' 또는 다른 레이블 단어들을 말해보세요.")
-        print("-" * 50)
-
-        while True:
-            # 3. 오디오 데이터 로드 및 추론
-            tensor_audio = audio.TensorAudio.create_from_audio_record(
-                audio_record, input_buffer_size
-            )
-            classification_result = classifier.classify(tensor_audio)
-
-            # 4. 결과 파싱 및 출력
-            if classification_result.classifications:
-                categories = classification_result.classifications[0].categories
-                
-                # 모든 레이블의 확률을 저장
-                scores = {category.label: category.score * 100 for category in categories}
-                
-                # 특정 단어의 확률
-                target_score = scores.get(TARGET_LABEL, 0.0)
-
-                # 출력 문자열 생성
-                output_str = f"⏰ {time.strftime('%H:%M:%S')} | "
-                
-                # 모든 감지된 레이블 출력
-                all_labels_str = ", ".join([
-                    f"{label}: {scores.get(label, 0.0):.1f}%" 
-                    for label in classifier.get_labels() if scores.get(label, 0.0) >= PROBABILITY_THRESHOLD * 100
-                ])
-
-                print(f"{output_str} 감지된 항목: {all_labels_str}")
-                
-                # 특정 단어 임계값 초과 시 경고
-                if target_score > 70.0:
-                    print(f"    🚨🚨 경고: '{TARGET_LABEL}' 감지 확률이 {target_score:.1f}%로 높습니다! 🚨🚨")
-
-            # 5. 다음 분석까지 대기
-            time.sleep(UPDATE_INTERVAL_SEC)
+        # 실제 로직: WebRTC의 오디오 프레임을 AudioData 객체에 계속 추가합니다.
+        # 이 부분이 가장 까다로우므로, 공식 예시를 참고하여 구현해야 합니다.
+        
+        # 임의의 추론 결과 업데이트 (실제 코드와 대체되어야 함)
+        if np.random.rand() > 0.8:
+            classification_result = self.classifier.classify(self.audio_record)
             
-    except KeyboardInterrupt:
-        print("\n\n👋 사용자 요청으로 실시간 감지 종료.")
+            top_category = classification_result.classifications[0].categories[0]
+            self.result = f"{top_category.category_name} ({top_category.score:.2f})"
+        
+        return frame
     
-    except Exception as e:
-        print(f"\n\n❌ 예기치 않은 오류 발생: {e}")
+# main 함수 수정
+def main():
+    st.title("🎤 실시간 음성 분류기 (Streamlit + WebRTC)")
+    
+    # 분류기 로드
+    classifier = load_classifier(TFLITE_MODEL_PATH)
+    st.sidebar.success("✅ TFLite 분류기 로드 완료")
+    
+    # webrtc_streamer 컴포넌트 실행
+    webrtc_ctx = webrtc_streamer(
+        key="sound-classifier",
+        mode=WebRtcMode.SENDONLY,
+        audio_processor_factory=lambda: TFLiteAudioProcessor(classifier),
+        media_stream_constraints={"video": False, "audio": True}
+    )
 
-    finally:
-        # 6. 리소스 정리
-        if 'audio_record' in locals() and audio_record:
-            audio_record.stop_recording()
-
-if __name__ == "__main__":
-    run_audio_classification()
+    if webrtc_ctx.state.playing and webrtc_ctx.audio_processor:
+        st.success("🟢 마이크 활성화됨: 말해보세요!")
+        st.write(f"현재 분류 결과: **{webrtc_ctx.audio_processor.result}**")
