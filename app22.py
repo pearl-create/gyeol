@@ -419,7 +419,7 @@ def show_daily_question():
             position: relative; 
             background: #ffffff; 
             border-radius: 1.5em; 
-            padding: 25px 20px 20px 20px; /* 상단 패딩 늘림 */
+            padding: 25px 20px 20px 20px; /* 패딩 유지 */
             min-height: 150px; 
             margin: 8px 0 5px 0; 
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
@@ -444,7 +444,7 @@ def show_daily_question():
             color: #333333;
             margin-top: 5px; 
             font-weight: 500;
-            padding-right: 50px; /* 버튼 공간 확보 */
+            padding-right: 20px; /* 불필요한 아이콘 공간 확보 제거 */
         }}
         
         /* 4. 폼 배경색을 흰색으로 설정하여 가독성 높임 */
@@ -457,53 +457,6 @@ def show_daily_question():
         div[data-testid="stForm"] label {{
             color: #333333 !important; 
             text-shadow: none;
-        }}
-
-        /* 5. 수정/삭제 아이콘 버튼 스타일링 (최종 위치 및 디자인) */
-        
-        /* 실제 Streamlit 버튼(disabled 상태 포함)을 화면에서 완전히 숨깁니다. */
-        div[data-testid^="stColumn"] > div > div > button[kind="secondary"],
-        div[data-testid^="stColumn"] > div > div > button[kind="secondary"][disabled] {{
-             display: none !important;
-        }}
-
-        /* HTML 마크다운으로 삽입된 아이콘 버튼 컨테이너 스타일링 */
-        .action-button-wrapper button {{
-            background-color: transparent !important; 
-            border: none !important; 
-            box-shadow: none !important; 
-            color: #8A2BE2 !important; 
-            font-size: 1.3em; 
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 5px; 
-            position: absolute; 
-            cursor: pointer;
-            transition: all 0.2s ease-in-out;
-            opacity: 0.7; 
-            z-index: 10; /* 다른 요소 위에 표시 */
-        }}
-        
-        .action-button-wrapper button:hover {{
-            color: #FF69B4 !important; 
-            opacity: 1; 
-            transform: scale(1.1); 
-            box-shadow: none !important;
-        }}
-        
-        /* 개별 아이콘 버튼 위치 조정 (연필/휴지통) */
-        /* 수정 아이콘 (연필) */
-        .edit-icon {{
-            top: 20px; /* 상단에서 20px 아래로 (정보 영역 옆) */
-            right: 50px; /* 오른쪽에서 50px 안쪽으로 */
-            font-size: 1.1em; /* 크기 약간 줄임 */
-        }}
-        /* 삭제 아이콘 (휴지통) */
-        .delete-icon {{
-            top: 20px; /* 상단에서 20px 아래로 */
-            right: 20px; /* 오른쪽에서 20px 안쪽으로 */
-            font-size: 1.1em; /* 크기 약간 줄임 */
         }}
         
         </style>
@@ -579,39 +532,14 @@ def show_daily_question():
                             <p class='bubble-answer'>
                                 {ans['answer']}
                             </p>
-                            
-                            {
-                                # ---------------------- 수정/삭제 아이콘 버튼 (소유자에게만) ----------------------
-                                '''
-                                <div class="action-button-wrapper">
-                                    <button class="edit-icon" 
-                                        onclick="document.querySelector('button[key=edit_btn_{i}]').click()">
-                                        ✏️
-                                    </button>
-                                    <button class="delete-icon" 
-                                        onclick="document.querySelector('button[key=delete_btn_{i}]').click()">
-                                        🗑️
-                                    </button>
-                                </div>
-                                ''' if is_owner else ''
-                            }
                         </div>
                         """
                     # st.markdown()을 사용하여 HTML 코드를 렌더링
                     st.markdown(answer_display_html, unsafe_allow_html=True)
                     
                     # ---------------------- 실제 Streamlit 버튼 (숨겨짐) ----------------------
-                    if is_owner:
-                        # 클릭 시 수정 모드로 전환
-                        if st.button("✏️", key=f"edit_btn_{i}", help="답변 수정", use_container_width=False, type="secondary"):
-                            st.session_state.editing_index = i
-                            st.session_state.confirming_delete_index = -1 
-                            st.rerun()
-                        # 클릭 시 삭제 확인 모드로 전환
-                        if st.button("🗑️", key=f"delete_btn_{i}", help="답변 삭제", use_container_width=False, type="secondary"):
-                            st.session_state.editing_index = -1
-                            st.session_state.confirming_delete_index = i
-                            st.rerun()
+                    # **요청에 따라 연필(수정)과 휴지통(삭제) 아이콘 및 관련 버튼 코드를 완전히 제거했습니다.**
+                    pass
 
 
     st.divider()
