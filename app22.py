@@ -138,20 +138,29 @@ def initialize_session_state():
 
     if 'logged_in' not in st.session_state:
         st.session_state.logged_in = False
+    
+    # --- [수정] 로그인 상태 유지 로직 추가 ---
+    if 'user_name' not in st.session_state:
+        st.session_state.user_name = "" # 로그인 성공 시 여기에 이름 저장
+
     if 'user_profile' not in st.session_state:
         st.session_state.user_profile = {}
+    
+    # Streamlit은 새로고침 시 session_state가 초기화되므로,
+    # 'user_name'이 있고 'all_users'에 해당 이름이 있다면 자동 로그인 처리
+    if st.session_state.user_name and st.session_state.user_name in st.session_state.all_users:
+        st.session_state.user_profile = st.session_state.all_users[st.session_state.user_name]
+        st.session_state.logged_in = True
+    else:
+        # 로그아웃 상태이거나, 이름이 있지만 데이터 파일에 없는 경우
+        st.session_state.logged_in = False
+        st.session_state.user_profile = {}
+    # ---------------------------------------
 
     # 영구 저장된 답변 데이터를 로드하거나, 없으면 초기 답변을 생성
-    daily_answers_from_file = load_json_data(ANSWERS_FILE_PATH, None)
-
-    if daily_answers_from_file is not None:
-        st.session_state.daily_answers = daily_answers_from_file
-    else:
-        # 초기 답변 생성 로직 (파일이 없을 경우)
-        initial_answers = []
-        st.session_state.daily_answers = initial_answers
-        # 초기 답변이 생성되면 파일에 저장 (최초 1회)
-        save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+    # [수정] show_daily_question 함수 내에서 실시간 로드를 위해 여기서는 초기값만 설정
+    if 'daily_answers' not in st.session_state:
+        st.session_state.daily_answers = load_json_data(ANSWERS_FILE_PATH, [])
         
     # 수정/삭제 기능 관련 상태 초기화. -1은 수정 중인 답변이 없음을 의미합니다.
     if 'editing_index' not in st.session_state:
@@ -164,6 +173,10 @@ def initialize_session_state():
 
     if 'recommendations' not in st.session_state:
         st.session_state.recommendations = pd.DataFrame()
+        
+    # --- [추가] 마지막 페이지 상태 유지 ---
+    if 'last_page' not in st.session_state:
+        st.session_state.last_page = "멘토 찾기" # 기본값
 
 initialize_session_state()
 
@@ -321,6 +334,9 @@ def show_login_form():
             elif name in st.session_state.all_users:
                 st.session_state.user_profile = st.session_state.all_users[name]
                 st.session_state.logged_in = True
+                # --- [수정] 로그인 성공 시 사용자 이름 저장 ---
+                st.session_state.user_name = name 
+                # ---------------------------------------------
                 st.success(f"🎉 {name}님, 환영합니다! 서비스를 시작합니다.")
                 st.rerun()
             else:
@@ -386,6 +402,9 @@ def show_registration_form():
                 st.session_state.all_users[name] = user_profile_data
                 st.session_state.user_profile = user_profile_data
                 st.session_state.logged_in = True
+                # --- [수정] 가입 성공 시 사용자 이름 저장 ---
+                st.session_state.user_name = name
+                # ------------------------------------------
 
                 # 사용자 데이터 영구 저장
                 save_json_data(st.session_state.all_users, USERS_FILE_PATH)
@@ -655,11 +674,21 @@ def main():
 
     else:
         # 로그인된 사용자용 메인 화면
+        # --- [수정] 마지막 페이지를 기본값으로 설정 ---
+        page_options = ["멘토 찾기", "오늘의 질문"]
+        
+        # 새로고침 시 last_page를 기본값으로 사용
+        default_index = page_options.index(st.session_state.last_page) if st.session_state.last_page in page_options else 0
+        
         page = st.sidebar.radio(
             "페이지 이동",
-            ["멘토 찾기", "오늘의 질문"],
-            index=0
+            page_options,
+            index=default_index
         )
+        
+        # --- [추가] 페이지 변경 시 last_page 상태 업데이트 ---
+        st.session_state.last_page = page 
+        # ----------------------------------------------------
 
         st.sidebar.divider()
         st.sidebar.markdown(f"**환영합니다, {st.session_state.user_profile.get('name')}님!**")
@@ -668,6 +697,9 @@ def main():
         if st.sidebar.button("🚪 로그아웃"):
             st.session_state.logged_in = False
             st.session_state.user_profile = {}
+            # --- [수정] 사용자 이름도 초기화 ---
+            st.session_state.user_name = ""
+            # ------------------------------------
             st.info("로그아웃되었습니다.")
             st.rerun()
 
