@@ -145,12 +145,8 @@ def initialize_session_state():
     if daily_answers_from_file is not None:
         st.session_state.daily_answers = daily_answers_from_file
     else:
-        # 초기 답변 생성 로직 (파일이 없을 경우): 완전히 빈 리스트로 초기화하여 샘플 답변을 제거합니다.
+        # 초기 답변 생성 로직 (파일이 없을 경우)
         initial_answers = []
-
-        # 기존의 샘플 답변 생성 로직(윤슬조, 다효니 답변)은 삭제되었습니다.
-        # 데이터 로드 실패 시의 최소 샘플 답변("샘플1")도 제거하여 깨끗한 상태로 시작합니다.
-
         st.session_state.daily_answers = initial_answers
         # 초기 답변이 생성되면 파일에 저장 (최초 1회)
         save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
@@ -360,50 +356,78 @@ def show_mentor_search_and_connect():
 def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
-    
-    # 1. 디자인: 눈에 띄는 배경과 답변 풍선 효과를 위한 Custom CSS (전역 적용)
+
+    # 1. 디자인: 말풍선 모양을 구현하기 위한 Custom CSS (전역 적용)
     st.markdown("""
         <style>
         /* 1. Keyframes for Floating Effect (말풍선이 둥둥 떠다니는 애니메이션) */
         @keyframes float {
             0% {
                 transform: translate(0, 0px);
-                box-shadow: 0 5px 15px 0px rgba(0,0,0,0.06);
             }
             50% {
                 transform: translate(0, -8px); /* 위로 8px 이동 */
-                box-shadow: 0 25px 15px 0px rgba(0,0,0,0.1);
             }
             100% {
                 transform: translate(0, 0px);
-                box-shadow: 0 5px 15px 0px rgba(0,0,0,0.06);
             }
         }
 
-        /* 앱 전체 배경색 변경 (눈에 띄게) */
+        /* 앱 전체 배경색 변경 */
         .stApp {
-            background-color: #f7f9fc; /* 아주 연한 푸른색 계열 */
+            background-color: #f7f9fc;
         }
-        
-        /* 2. 답변 컨테이너에 애니메이션 적용 (stExpander가 각 답변을 감싸는 요소) */
-        .stExpander {
-            border-radius: 12px;
-            background-color: #ffffff; 
-            margin-bottom: 20px; /* 아래 여백을 좀 더 줍니다. */
-            padding: 10px;
-            cursor: pointer;
+
+        /* 2. 말풍선 컨테이너 (st.container) 스타일링 */
+        .bubble-container {
+            position: relative;
+            background: #ffffff;
+            border-radius: 1.5em; /* 둥근 모서리 */
+            padding: 20px;
+            margin: 20px 0 35px 0; /* 꼬리가 아래로 내려올 공간 확보를 위해 아래쪽 여백 증가 */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             
             /* 애니메이션 적용 */
             animation: float 4s ease-in-out infinite; /* 4초 동안 부드럽게 무한 반복 */
-            transition: all 0.2s; /* 부드러운 전환을 위해 추가 */
+            transition: all 0.3s;
         }
         
-        .stExpander > div > div:first-child {
-            /* 헤더 부분 스타일 (클릭 영역) */
-            background-color: #eef1f6;
-            border-radius: 12px 12px 0 0;
-            padding: 15px 10px;
-            font-weight: bold;
+        /* 3. 말풍선 꼬리 (Speech Bubble Tail) - 컨테이너 하단 중앙에 삼각형 추가 */
+        .bubble-container::after {
+            content: '';
+            position: absolute;
+            bottom: -20px; /* 꼬리가 아래로 튀어나오도록 조정 */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border: 10px solid transparent;
+            border-top-color: #ffffff; /* 컨테이너와 같은 색상으로 꼬리 생성 */
+            border-bottom: 0;
+            margin-left: -10px;
+        }
+        
+        /* 4. Streamlit 기본 컨테이너의 패딩/마진 재설정 */
+        /* st.container를 사용하고 내부 요소에 직접 클래스를 부여하여 제어 */
+        div[data-testid="stVerticalBlock"] > div:not(:first-child) > div {
+            padding: 0; /* st.container의 불필요한 패딩 제거 */
+        }
+        
+        /* 5. 답변 텍스트 스타일 */
+        .bubble-answer {
+            font-size: 1.1em;
+            line-height: 1.6;
+            color: #333333;
+            margin-top: 10px;
+        }
+
+        /* 6. 이름/나이대 정보 스타일 */
+        .bubble-info {
+            font-size: 0.9em;
+            color: #555555;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -417,10 +441,26 @@ def show_daily_question():
         # 답변 순서는 이름순으로 정렬
         sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: x['name'], reverse=False)
 
-        for ans in sorted_answers:
-            # 풍선 🎈 이모지를 사용하여 말풍선 느낌 강조
-            with st.expander(f"🎈 [{ans['age_band']}] **{ans['name']}**님의 답변"):
-                st.write(ans['answer'])
+        # 3열 레이아웃으로 변경하여 여러 개의 말풍선을 동시에 보여줌
+        cols = st.columns(3)
+        
+        for i, ans in enumerate(sorted_answers):
+            # i % 3 을 사용하여 각 답변을 3개의 컬럼에 순차적으로 배치
+            with cols[i % 3]:
+                # st.container를 사용하고 커스텀 CSS 클래스를 적용하여 말풍선 모양을 만듭니다.
+                st.markdown(
+                    f"""
+                    <div class='bubble-container'>
+                        <p class='bubble-info'>
+                            🎈 **[{ans['age_band']}] {ans['name']}**님의 생각
+                        </p>
+                        <p class='bubble-answer'>
+                            {ans['answer']}
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
     st.divider()
 
@@ -445,8 +485,7 @@ def show_daily_question():
                 # 🌟 수정: 답변 데이터 영구 저장
                 save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
 
-                # 2. 기능: 새로고침 없이 바로 보이도록 st.rerun()을 사용하고 메시지를 명확히 함
-                st.success("✅ 답변이 성공적으로 제출되었습니다! 이제 움직이는 답변 목록에서 바로 확인하실 수 있습니다.")
+                st.success("✅ 답변이 성공적으로 제출되었습니다! 이제 움직이는 말풍선 목록에서 바로 확인하실 수 있습니다.")
                 st.rerun() 
             else:
                 st.warning("답변 내용을 입력해 주세요.")
