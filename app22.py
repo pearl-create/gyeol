@@ -20,7 +20,7 @@ WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
 TIMES = ["오전", "오후", "저녁"]
 AGE_BANDS = [
     "만 13세~19세", "만 20세~29세", "만 30세~39세",
-    "만 40세~49세", "만 50세~59세", "만 60세~69세",
+    "만 40세~49세", "만 50세~49세", "만 60세~69세",
     "만 70세~79세", "만 80세~89세", "만 90세 이상"
 ]
 
@@ -394,17 +394,11 @@ def show_daily_question():
             background: #ffffff; 
             border-radius: 1.5em; 
             padding: 20px;
-            padding-top: 40px; /* 이름/나이대 정보가 들어갈 공간 확보 */
             min-height: 100px; /* 최소 높이 설정 */
-            margin: 20px 0 5px 0; 
+            margin: 0 0 5px 0; 
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
             transition: all 0.2s ease-in-out;
             border: 1px solid rgba(255, 255, 255, 0.8); 
-        }}
-        
-        .bubble-container:hover {{
-            transform: none; 
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25); 
         }}
         
         /* 3. 답변 텍스트 스타일 */
@@ -412,22 +406,10 @@ def show_daily_question():
             font-size: 1.1em;
             line-height: 1.6;
             color: #333333;
-            margin-top: 5px; /* 공간 조정 */
-        }}
-
-        /* 4. 이름/나이대 정보 스타일 */
-        .bubble-info {{
-            font-size: 1em; 
-            font-weight: bold; 
-            color: #9400D3; 
-            padding-bottom: 8px;
-            margin-bottom: 0;
-            position: absolute; 
-            top: 15px;
-            left: 20px;
+            margin-top: 5px; 
         }}
         
-        /* 5. 폼 배경색을 흰색으로 설정하여 가독성 높임 */
+        /* 4. 폼 배경색을 흰색으로 설정하여 가독성 높임 */
         div[data-testid="stForm"] {{
             background-color: rgba(255, 255, 255, 0.9);
             border-radius: 15px;
@@ -438,58 +420,28 @@ def show_daily_question():
             color: #333333 !important; 
             text-shadow: none;
         }}
-        
-        /* 6. 수정/삭제 메뉴 버튼 (st.expander) 스타일 개선 - 위치 및 드롭다운 메뉴 개선 */
-        
-        /* Expander 버튼 (⋮ 아이콘) 스타일: 가시성 확보 및 흰색 배경 위 검은색 텍스트 강제 */
-        div[data-testid^="stExpander"] > div[role="button"] {{
-            padding: 0 8px;
-            background-color: transparent !important;
-            color: #000000 !important; /* 점 색상을 확실히 검은색으로 강제 */
-            font-size: 1.8em; 
-            cursor: pointer;
-            z-index: 20;
-            line-height: 1; 
-            font-weight: bold;
-            height: 30px; 
-            width: 30px; /* 너비를 고정하여 겹치지 않게 */
+
+        /* 5. 수정/삭제 버튼 스타일링 */
+        /* 아이콘 버튼을 위한 작은 크기 조정 */
+        div[data-testid^="stColumn"] > div > div > button {{
+            padding: 0;
+            width: 30px; /* 버튼 너비 */
+            height: 30px; /* 버튼 높이 */
+            border-radius: 50%;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            color: #333333 !important;
+            font-size: 1em;
             display: flex;
             align-items: center;
             justify-content: center;
-        }}
-
-        /* Expander 컨테이너 위치: 답변 박스 안 우측 상단 */
-        div[data-testid^="stVerticalBlock"] div[data-testid^="stExpander"] {{
-            position: absolute; 
-            top: 10px; /* 상단에서 조금 내려오게 조정 */
-            right: 15px; 
-            width: auto; 
-            z-index: 100; 
-            margin: 0 !important;
-            /* 드롭다운 메뉴가 오른쪽으로 튀어나오는 것을 막기 위해 Expander의 위치를 조정 */
-            /* Streamlit Expander의 내부 구조 때문에 메뉴 버튼을 포함하는 전체 블록을 움직여야 함 */
-            left: auto; 
+            margin: 0 2px;
         }}
         
-        /* 드롭다운 메뉴 내부 스타일: 메뉴가 왼쪽으로 펼쳐지도록 조정 (Streamlit의 기본 동작을 override) */
-        div[data-testid^="stExpander"] .stExpanderDetails {{
-            background-color: #f0f0f0; /* 배경색으로 가시성 확보 */
-            border-radius: 8px;
-            padding: 5px;
-            /* 메뉴가 오른쪽을 기준으로 왼쪽으로 펼쳐지도록 위치 조정 (hacky solution) */
-            position: absolute;
-            right: 0; 
-            top: 30px; 
-            width: 120px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }}
-
-
-        /* 드롭다운 메뉴 내부 버튼의 글자 색상 (수정, 삭제 텍스트) 강제 지정 */
-        div[data-testid^="stExpander"] .stExpanderDetails button p,
-        div[data-testid^="stExpander"] .stExpanderDetails button span,
-        div[data-testid^="stExpander"] .stExpanderDetails button div {{
-            color: #333333 !important; /* 버튼 내부의 모든 텍스트 요소를 어둡게 강제 */
+        /* 아이콘 버튼 위에 마우스 올렸을 때 스타일 */
+        div[data-testid^="stColumn"] > div > div > button:hover {{
+            background-color: #e0e0e0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }}
         
         </style>
@@ -513,6 +465,36 @@ def show_daily_question():
                 # ------------------- 📌 중요: 소유자 체크 --------------------
                 is_owner = (ans['name'] == current_name)
                 
+                # ------------------- 이름, 나이대, 아이콘 표시 영역 -------------------
+                # 10:1:1 비율로 이름/정보와 수정/삭제 버튼 배치
+                col_info, col_edit, col_delete = st.columns([10, 1, 1])
+                
+                with col_info:
+                    st.markdown(
+                        f"""
+                        <div style="font-size: 1em; font-weight: bold; color: #FFFFFF; padding-bottom: 8px;">
+                            [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
+                
+                # ---------------------- 수정/삭제 버튼 (소유자에게만) ----------------------
+                if is_owner and st.session_state.editing_index != i and st.session_state.confirming_delete_index != i:
+                    with col_edit:
+                        # 수정 버튼
+                        if st.button("✏️", key=f"edit_btn_{i}", help="답변 수정", use_container_width=True):
+                            st.session_state.editing_index = i
+                            st.session_state.confirming_delete_index = -1
+                            st.rerun()
+
+                    with col_delete:
+                        # 삭제 버튼
+                        if st.button("🗑️", key=f"delete_btn_{i}", help="답변 삭제", use_container_width=True):
+                            st.session_state.confirming_delete_index = i
+                            st.session_state.editing_index = -1
+                            st.rerun()
+                
                 # ---------------------- 수정 모드 --------------------------
                 if st.session_state.editing_index == i:
                     # 수정 모드일 때는 일반 말풍선 대신 수정 폼을 표시합니다.
@@ -526,7 +508,7 @@ def show_daily_question():
                                 if edited_text:
                                     st.session_state.daily_answers[i]['answer'] = edited_text
                                     st.session_state.editing_index = -1
-                                    st.session_state.confirming_delete_index = -1 # 혹시 모를 상태 초기화
+                                    st.session_state.confirming_delete_index = -1 
                                     save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
                                     st.success("✅ 답변이 성공적으로 수정되었습니다!")
                                     st.rerun()
@@ -538,15 +520,30 @@ def show_daily_question():
                                 st.session_state.confirming_delete_index = -1
                                 st.rerun()
                 
+                # ---------------------- 삭제 확인 모드 --------------------------
+                elif st.session_state.confirming_delete_index == i:
+                    # 삭제 확인 메시지 표시
+                    st.warning(f"정말로 답변을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.", icon="⚠️")
+                    col_confirm, col_cancel = st.columns(2)
+                    with col_confirm:
+                        if st.button("✅ 예, 삭제합니다.", key=f"confirm_delete_{i}", use_container_width=True):
+                            del st.session_state.daily_answers[i]
+                            save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                            st.toast("🗑️ 답변이 삭제되었습니다.")
+                            st.session_state.editing_index = -1 
+                            st.session_state.confirming_delete_index = -1 # 삭제 상태 해제
+                            st.rerun()
+                    with col_cancel:
+                        if st.button("❌ 취소", key=f"cancel_delete_{i}", use_container_width=True):
+                            st.session_state.confirming_delete_index = -1 # 삭제 상태 해제
+                            st.rerun()
+                
                 # ---------------------- 일반 표시 모드 --------------------------
                 else:
-                    # 마크다운은 HTML/CSS의 .bubble-container를 통해 전체 배경을 제공합니다.
+                    # 답변 텍스트 버블 표시
                     st.markdown(
                         f"""
                         <div class='bubble-container'>
-                            <p class='bubble-info'>
-                                [{ans['age_band']}] <span>{ans['name']}</span>님의 생각
-                            </p>
                             <p class='bubble-answer'>
                                 {ans['answer']}
                             </p>
@@ -554,39 +551,6 @@ def show_daily_question():
                         """,
                         unsafe_allow_html=True
                     )
-                    
-                    # ---------------------- 소유자 메뉴 및 삭제 확인 --------------------------
-                    if is_owner:
-                        # 삭제 확인 메시지가 떠있을 경우, 답변 대신 확인 폼을 보여줍니다.
-                        if st.session_state.confirming_delete_index == i:
-                            st.warning(f"정말로 답변을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.", icon="⚠️")
-                            col_confirm, col_cancel = st.columns(2)
-                            with col_confirm:
-                                if st.button("✅ 예, 삭제합니다.", key=f"confirm_delete_{i}", use_container_width=True):
-                                    del st.session_state.daily_answers[i]
-                                    save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
-                                    st.toast("🗑️ 답변이 삭제되었습니다.")
-                                    st.session_state.editing_index = -1 
-                                    st.session_state.confirming_delete_index = -1 # 삭제 상태 해제
-                                    st.rerun()
-                            with col_cancel:
-                                if st.button("❌ 취소", key=f"cancel_delete_{i}", use_container_width=True):
-                                    st.session_state.confirming_delete_index = -1 # 삭제 상태 해제
-                                    st.rerun()
-                        else:
-                            # Streamlit Expander를 점 세 개 메뉴처럼 사용하여 옵션 제공
-                            with st.expander("⋮", expanded=False): 
-                                col_e, col_d = st.columns(2)
-                                
-                                with col_e:
-                                    if st.button("✏️ 수정", key=f"edit_{i}", use_container_width=True):
-                                        st.session_state.editing_index = i
-                                        st.rerun()
-                                
-                                with col_d:
-                                    if st.button("🗑️ 삭제", key=f"delete_{i}", use_container_width=True, type="secondary"):
-                                        st.session_state.confirming_delete_index = i # 삭제 확인 상태로 전환
-                                        st.rerun()
 
 
     st.divider()
