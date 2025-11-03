@@ -366,7 +366,7 @@ def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
 
-    # 1. CSS 스타일 수정: 메뉴 버튼 가시성 및 드롭다운 메뉴 글자색 개선
+    # 1. CSS 스타일 수정: 가시성 및 디자인 문제 해결을 위한 집중 수정
     st.markdown(f"""
         <style>
         /* 앱 전체 배경 강렬한 마젠타-퍼플 그라데이션 */
@@ -387,7 +387,7 @@ def show_daily_question():
         .css-vk3ghm, .css-1dp54x6, .css-1aumw6k {{
             color: #FFFFFF !important;
         }}
-
+        
         /* 2. 말풍선 컨테이너 (st.container) 스타일링 */
         .bubble-container {{
             position: relative; 
@@ -395,18 +395,20 @@ def show_daily_question():
             border-radius: 1.5em; 
             padding: 20px;
             min-height: 100px; /* 최소 높이 설정 */
-            margin: 0 0 5px 0; 
+            /* 상단과의 간격 확보 */
+            margin: 8px 0 5px 0; 
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
             transition: all 0.2s ease-in-out;
             border: 1px solid rgba(255, 255, 255, 0.8); 
         }}
         
-        /* 3. 답변 텍스트 스타일 */
+        /* 3. 답변 텍스트 스타일 개선 (가독성 향상) */
         .bubble-answer {{
             font-size: 1.1em;
             line-height: 1.6;
             color: #333333;
             margin-top: 5px; 
+            font-weight: 500; /* 미세하게 굵게 조정 */
         }}
         
         /* 4. 폼 배경색을 흰색으로 설정하여 가독성 높임 */
@@ -421,27 +423,29 @@ def show_daily_question():
             text-shadow: none;
         }}
 
-        /* 5. 수정/삭제 버튼 스타일링 */
+        /* 5. 수정/삭제 버튼 가시성 및 디자인 개선 */
         /* 아이콘 버튼을 위한 작은 크기 조정 */
         div[data-testid^="stColumn"] > div > div > button {{
             padding: 0;
             width: 30px; /* 버튼 너비 */
             height: 30px; /* 버튼 높이 */
             border-radius: 50%;
-            background-color: #f0f0f0;
+            background-color: #f0f0f0; /* 배경색 밝게 변경 */
             border: 1px solid #ccc;
-            color: #333333 !important;
-            font-size: 1em;
+            color: #4A148C !important; /* 아이콘 색상을 진한 보라색으로 변경 */
+            font-size: 1.1em; /* 아이콘 크기 약간 키움 */
             display: flex;
             align-items: center;
             justify-content: center;
             margin: 0 2px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* 그림자 추가 */
         }}
         
         /* 아이콘 버튼 위에 마우스 올렸을 때 스타일 */
         div[data-testid^="stColumn"] > div > div > button:hover {{
             background-color: #e0e0e0;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
         }}
         
         </style>
@@ -470,6 +474,7 @@ def show_daily_question():
                 col_info, col_edit, col_delete = st.columns([10, 1, 1])
                 
                 with col_info:
+                    # 답변 제목 영역 (상단 보라색 영역)
                     st.markdown(
                         f"""
                         <div style="font-size: 1em; font-weight: bold; color: #FFFFFF; padding-bottom: 8px;">
