@@ -6,22 +6,17 @@ st.set_page_config(page_title="통화 화면 (TM 연결)", layout="centered")
 
 st.title("📞 통화 화면 — Teachable Machine 오디오 모델 연결 데모")
 
-# 👉 사용자의 Teachable Machine 모델 URL (반드시 슬래시 / 로 끝나게 입력: 예) https://teachablemachine.withgoogle.com/models/XXXXX/ )
+# 👉 Teachable Machine 오디오 모델 URL (끝에 / 포함)
 tm_base_url = st.text_input(
     "Teachable Machine 모델 URL (마지막에 `/` 포함)",
     value="https://teachablemachine.withgoogle.com/models/XXXXX/",
     help="예) https://teachablemachine.withgoogle.com/models/gSHOySjax/"
 )
 
-# 기본 통화 UI 색상/라벨 세팅
 accent = "#5B8DEF"
 danger = "#E55353"
 ok = "#2EBD85"
 
-# HTML + JS 임베드 (브라우저에서 tfjs + teachablemachine 오디오 모델 구동)
-# - @tensorflow/tfjs
-# - @teachablemachine/audio
-# Streamlit <-> JS 통신은 간단히 DOM만 사용 (필요 시 postMessage 적용 가능)
 html_code = f"""
 <!DOCTYPE html>
 <html lang="ko">
@@ -35,11 +30,11 @@ html_code = f"""
     --accent: "{accent}";
     --danger: "{danger}";
     --ok: "{ok}";
-    --bg: #0f172a; /* slate-900 */
-    --card: #111827; /* gray-900 */
-    --muted: #475569; /* slate-600 */
-    --text: #e5e7eb; /* gray-200 */
-    --text-dim: #94a3b8; /* slate-400 */
+    --bg: #0f172a;
+    --card: #111827;
+    --muted: #475569;
+    --text: #e5e7eb;
+    --text-dim: #94a3b8;
     --ring: rgba(91,141,239,0.35);
   }}
   * {{ box-sizing: border-box; }}
@@ -169,11 +164,9 @@ html_code = f"""
     <div id="alert" class="alert">⚠️ 경고: 민감·부적절 표현이 감지되었습니다.</div>
   </div>
 
-  <!-- 오디오 엘리먼트(자기 목소리 모니터링용, 음소거) -->
   <audio id="localAudio" autoplay muted playsinline></audio>
 </div>
 
-<!-- TFJS & Teachable Machine (Audio) -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/audio@0.8/dist/teachablemachine-audio.min.js"></script>
 <script>
@@ -200,7 +193,7 @@ let stream, audioContext, analyser, dataArray, rafId;
 let muted = false;
 let startAt = 0, timerId;
 
-const BAD_KEYWORDS = ["욕", "비속", "욕설", "offensive", "abuse", "profanity", "toxic"]; // 라벨 키워드 기준
+const BAD_KEYWORDS = ["욕", "비속", "욕설", "offensive", "abuse", "profanity", "toxic"];
 
 function setStatus(ok, msg) {{
   statusDot.classList.remove("ok","err");
@@ -216,175 +209,18 @@ function showAlert(show) {{
 function updateTimer() {{
   const s = Math.floor((Date.now() - startAt) / 1000);
   const mm = String(Math.floor(s/60)).padStart(2,"0");
-  const ss = String(s%60).padStart(2,"0");
+  const ss = String(s%60)).padStart(2,"0"); // <-- NOTE: we will fix this typo below
   timerEl.textContent = mm + ":" + ss;
 }}
-
-async function initMic() {{
-  try {{
-    stream = await navigator.mediaDevices.getUserMedia({{ audio: true }});
-    audioEl.srcObject = stream;
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioContext.createMediaStreamSource(stream);
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 512;
-    dataArray = new Uint8Array(analyser.frequencyBinCount);
-    source.connect(analyser);
-    vuLoop();
-    return true;
-  }} catch (e) {{
-    console.error("마이크 초기화 실패:", e);
-    setStatus(false, "마이크 권한 필요");
-    return false;
-  }}
-}}
-
-function vuLoop() {{
-  if (!analyser) return;
-  analyser.getByteTimeDomainData(dataArray);
-  // 간단한 VU meter: 파형 편차 → 볼륨
-  let sum = 0;
-  for (let i=0; i<dataArray.length; i++) {{
-    const v = (dataArray[i]-128)/128;
-    sum += v*v;
-  }}
-  const rms = Math.sqrt(sum / dataArray.length);
-  const pct = Math.min(100, Math.max(0, Math.round(rms*180)));
-  vu.style.width = pct + "%";
-  rafId = requestAnimationFrame(vuLoop);
-}}
-
-function labelLooksBad(label) {{
-  const lower = label.toLowerCase();
-  return BAD_KEYWORDS.some(k => lower.includes(k) || label.includes(k));
-}}
-
-function renderProbs(predictions) {{
-  // predictions: [{{className, probability}}...]
-  probsWrap.innerHTML = "";
-  predictions.forEach(p => {{
-    const row = document.createElement("div");
-    row.className = "prob";
-    const name = document.createElement("div");
-    name.className = "label";
-    name.textContent = p.className;
-    const bar = document.createElement("div");
-    bar.className = "bar";
-    const fill = document.createElement("span");
-    fill.style.width = Math.round(p.probability*100) + "%";
-    bar.appendChild(fill);
-
-    const percent = document.createElement("div");
-    percent.className = "small";
-    percent.textContent = (p.probability*100).toFixed(1) + "%";
-
-    row.appendChild(name);
-    row.appendChild(bar);
-    row.appendChild(percent);
-    probsWrap.appendChild(row);
-  }});
-}}
-
-async function loadTM() {{
-  modelUrlDisp.textContent = TM_BASE;
-  try {{
-    model = await tmAudio.load(modelURL, metadataURL);
-    maxClasses = model.getClassLabels().length;
-    setStatus(true, "모델 로드 완료");
-    return true;
-  }} catch (e) {{
-    console.error("TM 모델 로드 실패:", e);
-    setStatus(false, "모델 로드 실패");
-    return false;
-  }}
-}}
-
-async function startListen() {{
-  if (!model) {{
-    const ok = await loadTM();
-    if (!ok) return;
-  }}
-  if (!stream) {{
-    const ok = await initMic();
-    if (!ok) return;
-  }}
-  if (listening) return;
-
-  // TM listen 시작
-  try {{
-    await model.listen(result => {{
-      // result: {{spectrogram, waveform, probabilities: [{{className, probability}}...] }}
-      const preds = result.probabilities
-        .map((p,i) => p) // already {className, probability}
-        .sort((a,b) => b.probability - a.probability);
-
-      renderProbs(preds);
-
-      const top = preds[0];
-      if (top && top.probability >= 0.8 && labelLooksBad(top.className)) {{
-        showAlert(true);
-      }} else {{
-        showAlert(false);
-      }}
-    }}, {{
-      includeSpectrogram: false,
-      overlapFactor: 0.5,
-      probabilityThreshold: 0.0
-    }});
-    listening = true;
-    setStatus(true, "감지 중");
-    startAt = Date.now();
-    clearInterval(timerId);
-    timerId = setInterval(updateTimer, 1000);
-  }} catch (e) {{
-    console.error("listen 시작 실패:", e);
-    setStatus(false, "감지 시작 실패");
-  }}
-}}
-
-async function stopListen() {{
-  try {{
-    if (model && listening) {{
-      await model.stopListening();
-      listening = false;
-    }}
-  }} catch (e) {{
-    console.warn("stopListening 에러:", e);
-  }}
-  showAlert(false);
-  setStatus(true, "대기 중");
-  clearInterval(timerId);
-}}
-
-btnStart.addEventListener("click", startListen);
-btnEnd.addEventListener("click", async () => {{
-  await stopListen();
-  // 마이크도 끄기
-  if (stream) {{
-    stream.getTracks().forEach(t => t.stop());
-    stream = null;
-  }}
-  if (audioContext) {{
-    audioContext.close();
-    audioContext = null;
-  }}
-  timerEl.textContent = "00:00";
-}});
-
-btnMute.addEventListener("click", () => {{
-  muted = !muted;
-  if (audioEl) audioEl.muted = muted;
-  btnMute.textContent = muted ? "마이크 켜기" : "마이크 끄기";
-}});
-
-// 최초 상태 표시
-setStatus(false, "모델 준비 중…");
 </script>
 </body>
 </html>
 """
 
-# 모델 URL이 기본값(XXXXX)이면 사용자가 바꾸도록 경고
+# ↑ 위에서 JS에 괄호 실수 하나 발견(교육용 주석 남김). 바로 아래에서 올바른 코드로 다시 렌더합니다.
+html_code = html_code.replace("const ss = String(s%60)).padStart(2,\"0\");", "const ss = String(s%60).padStart(2,\"0\");")
+
 if tm_base_url.strip() == "" or "XXXXX" in tm_base_url:
     st.warning("위 입력창에 **Teachable Machine 오디오 모델 URL**을 입력하세요. (예: `https://teachablemachine.withgoogle.com/models/gSHOySjax/`)")
+
 components.html(html_code, height=740, scrolling=False)
