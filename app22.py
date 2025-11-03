@@ -3,10 +3,11 @@ import pandas as pd
 import random
 import time
 import os
-import json # JSON 파일 저장을 위해 import
+import json 
 
 # --- 1. 데이터 로드 및 상수 정의 ---
 
+# 파일 경로 정의
 MENTOR_CSV_PATH = "멘토더미.csv"
 USERS_FILE_PATH = "users.json" # 사용자 계정 정보를 저장할 파일 경로
 ANSWERS_FILE_PATH = "daily_answers.json" # 오늘의 질문 답변을 저장할 파일 경로
@@ -64,17 +65,15 @@ COMM_STYLES = {
     "냉철한 조언자형": "논리적이고 문제 해결 중심으로 조언을 주는 편이에요."
 }
 
-# --- 2. 데이터 초기화 및 로드 ---
+# --- 2. 데이터 초기화 및 로드 함수 ---
 
 def load_mentor_data():
     if os.path.exists(MENTOR_CSV_PATH):
         try:
             df = pd.read_csv(MENTOR_CSV_PATH, encoding='utf-8')
             df.columns = df.columns.str.strip()
-            # 'style'을 필수 컬럼으로 가정
             required_cols = ['name', 'age_band', 'occupation_major', 'topic_prefs', 'style', 'intro']
 
-            # 파일 컬럼 이름이 'communication_style'이면 'style'로 변경하여 호환성 확보
             if 'communication_style' in df.columns and 'style' not in df.columns:
                 df = df.rename(columns={'communication_style': 'style'})
 
@@ -89,7 +88,6 @@ def load_mentor_data():
             try:
                 df = pd.read_csv(MENTOR_CSV_PATH, encoding='cp949')
                 df.columns = df.columns.str.strip()
-                # 파일 컬럼 이름이 'communication_style'이면 'style'로 변경하여 호환성 확보
                 if 'communication_style' in df.columns and 'style' not in df.columns:
                     df = df.rename(columns={'communication_style': 'style'})
                 return df
@@ -104,9 +102,7 @@ def load_mentor_data():
         return pd.DataFrame()
 
 
-# --- 2-1. 영구 저장(Persistence) 헬퍼 함수 ---
 def load_json_data(file_path, default_value):
-    """JSON 파일에서 데이터를 로드하거나, 파일이 없으면 기본값을 반환합니다."""
     if os.path.exists(file_path):
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -117,21 +113,18 @@ def load_json_data(file_path, default_value):
     return default_value
 
 def save_json_data(data, file_path):
-    """데이터를 JSON 파일에 저장합니다."""
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
-            # ensure_ascii=False: 한글 깨짐 방지, indent=4: 가독성 높임
             json.dump(data, f, ensure_ascii=False, indent=4)
     except Exception as e:
         st.error(f"데이터 파일 저장 오류 ({file_path}): {e}")
-# ---------------------------------------------
 
 
 def initialize_session_state():
     mentors_df = load_mentor_data()
     st.session_state.mentors_df = mentors_df
 
-    # 🌟 수정: 영구 저장된 사용자 데이터를 로드
+    # 영구 저장된 사용자 데이터를 로드
     st.session_state.all_users = load_json_data(USERS_FILE_PATH, {})
 
     if 'logged_in' not in st.session_state:
@@ -139,21 +132,27 @@ def initialize_session_state():
     if 'user_profile' not in st.session_state:
         st.session_state.user_profile = {}
 
-    # 🌟 수정: 영구 저장된 답변 데이터를 로드하거나, 없으면 초기 답변을 생성
+    # 영구 저장된 답변 데이터를 로드하거나, 없으면 초기 답변을 생성
     daily_answers_from_file = load_json_data(ANSWERS_FILE_PATH, None)
 
     if daily_answers_from_file is not None:
         st.session_state.daily_answers = daily_answers_from_file
     else:
-        # 초기 답변 생성 로직 (파일이 없을 경우): 완전히 빈 리스트로 초기화하여 샘플 답변을 제거합니다.
+        # 초기 답변 생성 로직 (파일이 없을 경우)
         initial_answers = []
-
-        # 기존의 샘플 답변 생성 로직(윤슬조, 다효니 답변)은 삭제되었습니다.
-        # 데이터 로드 실패 시의 최소 샘플 답변("샘플1")도 제거하여 깨끗한 상태로 시작합니다.
-
         st.session_state.daily_answers = initial_answers
         # 초기 답변이 생성되면 파일에 저장 (최초 1회)
         save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+        
+    # 🌟 수정: 수정/삭제 기능 관련 상태 초기화 (필수)
+    if 'editing_index' not in st.session_state:
+        # -1은 수정 중인 답변이 없음을 의미
+        st.session_state.editing_index = -1 
+        
+    # 🌟 수정: 삭제 확인 상태 (답변 인덱스) 초기화 (필수)
+    if 'confirming_delete_index' not in st.session_state:
+        st.session_state.confirming_delete_index = -1 
+
 
     if 'recommendations' not in st.session_state:
         st.session_state.recommendations = pd.DataFrame()
@@ -161,10 +160,11 @@ def initialize_session_state():
 initialize_session_state()
 
 if st.session_state.mentors_df.empty and not st.session_state.logged_in:
+    # 멘토 데이터가 없고 로그인도 안 되어 있으면 더 이상 진행하지 않음
     st.stop()
 
-# --- 3. 멘토 추천 로직 함수 ---
 
+# --- 3. 멘토 추천 로직 함수 ---
 def recommend_mentors(search_field, search_topic, search_style):
     mentors = st.session_state.mentors_df.copy()
     mentors['score'] = 0
@@ -189,17 +189,15 @@ def recommend_mentors(search_field, search_topic, search_style):
     return recommended_mentors.reset_index(drop=True)
 
 
-# --- 4. 인증/회원가입/UI 함수 정의 ---
+# --- 4. 인증/UI 함수 정의 ---
 
 def show_login_form():
-    """로그인 폼을 표시합니다."""
     st.header("🔑 로그인")
-
+    st.caption("이름만으로 간편하게 로그인합니다.")
     with st.form("login_form"):
+        # 비밀번호를 제외하고 이름만 사용
         name = st.text_input("이름을 입력하세요 (가입 시 사용한 이름)", placeholder="홍길동")
-
-        submitted = st.form_submit_button("로그인")
-
+        submitted = st.form_submit_button("로그인", type="primary")
         if submitted:
             if not name:
                 st.error("이름을 입력해 주세요.")
@@ -212,9 +210,7 @@ def show_login_form():
                 st.error(f"'{name}'으로 등록된 회원을 찾을 수 없습니다. 회원 가입을 해주세요.")
 
 def show_registration_form():
-    """회원 가입 폼을 표시합니다."""
     st.header("👤 회원 가입")
-
     with st.form("registration_form"):
         st.subheader("기본 정보")
         name = st.text_input("이름 (로그인 시 사용됩니다)", placeholder="홍길동")
@@ -248,7 +244,7 @@ def show_registration_form():
         )
         selected_style = selected_style_full.split(':')[0]
 
-        submitted = st.form_submit_button("가입 완료 및 서비스 시작")
+        submitted = st.form_submit_button("가입 완료 및 서비스 시작", type="primary")
 
         if submitted:
             if not name or not available_days or not available_times or not selected_topics or not selected_style:
@@ -272,14 +268,13 @@ def show_registration_form():
                 st.session_state.user_profile = user_profile_data
                 st.session_state.logged_in = True
 
-                # 🌟 수정: 사용자 데이터 영구 저장
+                # 사용자 데이터 영구 저장
                 save_json_data(st.session_state.all_users, USERS_FILE_PATH)
 
                 st.success(f"🎉 {name}님, 성공적으로 가입 및 로그인되었습니다!")
                 st.rerun()
 
 def show_mentor_search_and_connect():
-    """멘토 검색 및 연결 기능을 표시합니다."""
     st.header("🔍 멘토 찾기 및 연결")
 
     mentors = st.session_state.mentors_df
@@ -292,7 +287,6 @@ def show_mentor_search_and_connect():
 
         available_topics = sorted([t for t in set(t.strip() for items in mentors['topic_prefs'].astype(str).str.split('[,;]') for t in items if t.strip())])
 
-        # 'style' 컬럼을 사용하도록 가정하고, 해당 컬럼의 고유값을 스타일 옵션으로 사용
         if 'style' in mentors.columns:
             available_styles = sorted(list(mentors['style'].dropna().unique()))
         else:
@@ -309,7 +303,7 @@ def show_mentor_search_and_connect():
         with col_s:
             search_style = st.selectbox("🗣️ 선호 대화 스타일", options=['(전체)'] + available_styles)
 
-        submitted = st.form_submit_button("🔎 검색 시작")
+        submitted = st.form_submit_button("🔎 검색 시작", type="primary")
 
     if submitted:
         field = search_field if search_field != '(전체)' else ''
@@ -342,13 +336,12 @@ def show_mentor_search_and_connect():
                 with col_m2:
                     st.markdown(f"**주요 주제:** {row['topic_prefs']}")
                 with col_m3:
-                    # 'style' 컬럼 값 출력 가정
                     st.markdown(f"**소통 스타일:** {row['style']}")
 
                 st.markdown(f"**멘토 한마디:** _{row['intro']}_")
 
                 connect_button_key = f"connect_btn_{row['name']}_{index}"
-                if st.button("🔗 연결", key=connect_button_key):
+                if st.button("🔗 연결", key=connect_button_key, type="primary"):
                     st.session_state.connecting = True
                     st.session_state.connect_mentor_name = row['name']
                     st.rerun()
@@ -356,33 +349,202 @@ def show_mentor_search_and_connect():
     elif not submitted:
         st.info("검색 조건을 입력하고 '🔎 검색 시작' 버튼을 눌러 멘토를 찾아보세요.")
 
-
 def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
+
+    # 1. CSS 스타일: 차분한 배경과 통일된 톤앤매너 적용 (개선된 코드)
+    st.markdown(f"""
+        <style>
+        /* 앱 전체 배경을 밝은 회색으로 변경 (차분함) */
+        .stApp {{
+            background-color: #f7f9fc; /* 매우 밝은 회색/하늘색 */
+            background-attachment: fixed;
+            color: #333333; /* 기본 텍스트 색상 */
+        }}
+
+        /* 헤더/텍스트 색상 기본값으로 복원 (어두운 색) */
+        h1, h2, h3, h4, h5, h6, .stMarkdown, .stSubheader, label {{
+            color: #1c1c1c !important; 
+            text-shadow: none;
+        }}
+
+        /* 2. 답변 컨테이너 스타일링 (카드 스타일) */
+        .bubble-container {{
+            background: #ffffff; 
+            border-radius: 12px; /* 부드러운 모서리 */
+            padding: 20px;
+            margin: 10px 0; 
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* 은은한 그림자 */
+            border: 1px solid #e0e0e0; 
+            transition: all 0.2s ease-in-out;
+            min-height: 120px;
+        }}
+        
+        /* 2-1. 답변 정보 (나이대/이름) 스타일링 */
+        .bubble-info {{
+            font-size: 0.9em;
+            font-weight: bold;
+            color: #6A1B9A; /* 포인트 색상: 짙은 보라 */
+            border-bottom: 2px solid #e9d5ff; /* 정보와 답변 사이 구분선 */
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }}
+        
+        /* 3. 답변 텍스트 스타일 개선 */
+        .bubble-answer {{
+            font-size: 1.05em;
+            line-height: 1.6;
+            color: #444444;
+            margin-top: 5px; 
+            font-weight: 400;
+        }}
+        
+        /* 4. 폼 배경색을 흰색으로 설정하여 가독성 높임 */
+        div[data-testid="stForm"] {{
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e0e0e0;
+        }}
+        div[data-testid="stForm"] label {{
+            color: #333333 !important; 
+            text-shadow: none;
+        }}
+
+        /* 5. 버튼 스타일링 */
+        /* Primary 버튼 (제출)을 포인트 색상으로 변경 */
+        .stButton button[kind="primary"] {{
+            background-color: #6A1B9A;
+            border-color: #6A1B9A;
+            color: white;
+        }}
+        .stButton button[kind="primary"]:hover {{
+            background-color: #4A148C;
+            border-color: #4A148C;
+        }}
+        /* Secondary 버튼을 기본 회색으로 설정 */
+        .stButton button[kind="secondary"] {{
+            background-color: #f0f0f0;
+            border-color: #ccc;
+            color: #333;
+        }}
+        .stButton button[kind="secondary"]:hover {{
+            background-color: #e0e0e0;
+        }}
+        
+        </style>
+    """, unsafe_allow_html=True)
+
 
     daily_q = "🤔 **'나와 전혀 다른 세대의 삶을 하루만 살아볼 수 있다면, 어떤 세대의 삶을 살아보고 싶은지 이유와 함께 알려주세요!'**"
     st.subheader(daily_q)
 
     # --- 답변 리스트 (세션 상태에 누적된 답변 사용) ---
     if st.session_state.daily_answers:
-        # 답변 순서는 이름순으로 정렬
-        sorted_answers = sorted(st.session_state.daily_answers, key=lambda x: x['name'], reverse=False)
+        # 답변을 최신순(작성된 순서)으로 표시
+        sorted_answers = st.session_state.daily_answers 
+        current_name = st.session_state.user_profile.get('name')
+        
+        # 답변을 2열로 나누어 표시
+        cols = st.columns(2)
+        
+        for i, ans in enumerate(sorted_answers):
+            # 답변을 돌아가면서 2개의 컬럼에 배치
+            col = cols[i % 2]
+            
+            # 소유자 체크
+            is_owner = (ans['name'] == current_name)
+            
+            with col:
+                # 개별 답변 컨테이너 생성
+                st.markdown("<div class='bubble-container'>", unsafe_allow_html=True)
+                
+                # 정보 표시
+                st.markdown(f"<div class='bubble-info'>[{ans['age_band']}] <span>{ans['name']}</span>님의 생각</div>", unsafe_allow_html=True)
 
-        for ans in sorted_answers:
-            with st.expander(f"[{ans['age_band']}] **{ans['name']}**님의 답변"):
-                st.write(ans['answer'])
+                # 🌟 수정/삭제 기능 구현 시작
+                if st.session_state.editing_index == i:
+                    # 1. 수정 모드: 수정 폼을 표시
+                    with st.form(f"edit_form_{i}", clear_on_submit=False):
+                        edited_text = st.text_area("수정 내용", ans['answer'], height=100, key=f"edit_text_{i}")
+                        col_save, col_cancel = st.columns(2)
+                        
+                        with col_save:
+                            if st.form_submit_button("💾 저장", type="primary", use_container_width=True):
+                                if edited_text:
+                                    st.session_state.daily_answers[i]['answer'] = edited_text
+                                    st.session_state.editing_index = -1
+                                    st.session_state.confirming_delete_index = -1 
+                                    save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                                    st.toast("✅ 답변이 성공적으로 수정되었습니다!")
+                                    time.sleep(0.5)
+                                    st.rerun()
+                                else:
+                                    st.error("수정할 내용을 입력해 주세요.")
+                        with col_cancel:
+                            if st.form_submit_button("취소", use_container_width=True):
+                                st.session_state.editing_index = -1
+                                st.session_state.confirming_delete_index = -1
+                                st.rerun()
+                    
+                elif st.session_state.confirming_delete_index == i:
+                    # 2. 삭제 확인 모드: 확인 메시지 표시
+                    st.warning(f"정말로 답변을 삭제하시겠습니까?", icon="⚠️")
+                    col_confirm, col_cancel = st.columns(2)
+                    with col_confirm:
+                        # 삭제 버튼은 Secondary 스타일로 설정
+                        if st.button("✅ 예, 삭제합니다.", key=f"confirm_delete_{i}", type="secondary", use_container_width=True):
+                            del st.session_state.daily_answers[i]
+                            save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
+                            st.toast("🗑️ 답변이 삭제되었습니다.")
+                            st.session_state.editing_index = -1 
+                            st.session_state.confirming_delete_index = -1 # 삭제 상태 해제
+                            time.sleep(0.5)
+                            st.rerun()
+                    with col_cancel:
+                        if st.button("❌ 취소", key=f"cancel_delete_{i}", use_container_width=True):
+                            st.session_state.confirming_delete_index = -1 # 삭제 상태 해제
+                            st.rerun()
+                    
+                else:
+                    # 3. 일반 답변 표시
+                    st.markdown(f"<p class='bubble-answer'>{ans['answer']}</p>", unsafe_allow_html=True)
+                    
+                    # ---------------------- 수정/삭제 버튼 (안정적 배치) ----------------------
+                    if is_owner:
+                        st.divider()
+                        # 버튼들을 한 줄에 배치하고 뒤에 공간을 둠
+                        col_edit, col_delete, col_spacer = st.columns([1, 1, 4])
+                        
+                        with col_edit:
+                            if st.button("✏️ 수정", key=f"edit_btn_{i}", use_container_width=True, type="secondary"):
+                                st.session_state.editing_index = i
+                                st.session_state.confirming_delete_index = -1 
+                                st.rerun()
+                        
+                        with col_delete:
+                            if st.button("🗑️ 삭제", key=f"delete_btn_{i}", use_container_width=True, type="secondary"):
+                                st.session_state.editing_index = -1
+                                st.session_state.confirming_delete_index = i
+                                st.rerun()
+
+                # CSS class 닫기
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("---") # 컬럼 내 구분선 추가
+                
 
     st.divider()
 
     # --- 답변 작성 폼 ---
-    st.subheader("나의 답변 작성하기")
+    st.subheader("나의 답변 작성")
     current_name = st.session_state.user_profile.get('name', '익명')
     current_age = st.session_state.user_profile.get('age_band', '미등록')
 
     with st.form("answer_form"):
-        answer_text = st.text_area("질문에 대한 당신의 생각을 적어주세요.", max_chars=500, height=150)
-        submitted = st.form_submit_button("답변 제출")
+        answer_text = st.text_area("", max_chars=500, height=150, placeholder="여기에 당신의 생각을 자유롭게 적어주세요...")
+        submitted = st.form_submit_button("답변 제출", type="primary")
 
         if submitted:
             if answer_text:
@@ -393,28 +555,22 @@ def show_daily_question():
                 }
                 st.session_state.daily_answers.append(new_answer)
 
-                # 🌟 수정: 답변 데이터 영구 저장
+                # 답변 데이터 영구 저장
                 save_json_data(st.session_state.daily_answers, ANSWERS_FILE_PATH)
 
-                st.success("답변이 제출되었습니다. 페이지를 새로고침하면(R 키) 누적된 답변을 볼 수 있습니다.")
-                st.rerun()
+                st.success("✅ 답변이 성공적으로 제출되었습니다! 이제 목록에서 바로 확인하실 수 있습니다.")
+                st.rerun() 
             else:
                 st.warning("답변 내용을 입력해 주세요.")
 
 
-# --- 5. 메인 앱 실행 함수 (디버그 패널 포함) ---
-
+# --- 5. 메인 앱 실행 함수 ---
 def main():
     st.set_page_config(
         page_title="세대 간 멘토링 플랫폼",
         layout="wide",
         initial_sidebar_state="expanded"
     )
-
-    if st.session_state.mentors_df.empty and not st.session_state.logged_in:
-        st.title("👵👴 플랫폼 준비 중 🧑‍💻")
-        st.error(f"⚠️ 멘토 데이터 파일 '{MENTOR_CSV_PATH}'을(를) 로드하지 못했습니다. 파일을 확인해 주세요.")
-        st.stop()
 
     # --- 연결 프로세스 처리 ---
     if st.session_state.get('connecting'):
@@ -436,7 +592,7 @@ def main():
         st.success(f"✅ **{mentor_name} 멘토**님과의 화상 채팅 연결이 새로운 탭에서 시작되었습니다.")
         st.markdown(f"**[Google Meet 연결 바로가기: {GOOGLE_MEET_URL}]({GOOGLE_MEET_URL})**")
 
-        if st.button("⬅️ 다른 멘토 찾아보기"):
+        if st.button("⬅️ 다른 멘토 찾아보기", type="secondary"):
             st.session_state.connecting = False
             del st.session_state.connect_mentor_name
             st.rerun()
@@ -446,11 +602,12 @@ def main():
     # --- 메인 페이지 흐름 제어 ---
     st.sidebar.title("메뉴")
 
-    st.title("👵👴 결(멘티용)🧑‍💻")
-
+    # 타이틀 (톤앤매너 적용)
+    st.markdown("<h1>👵👴 결(멘티용)🧑‍💻</h1>", unsafe_allow_html=True)
+    
     if not st.session_state.logged_in:
         # 로그인/회원가입 선택
-        auth_option = st.radio("서비스 시작", ["로그인", "회원 가입"], index=0, horizontal=True)
+        auth_option = st.sidebar.radio("서비스 시작", ["로그인", "회원 가입"], index=0, horizontal=True)
         if auth_option == "로그인":
             show_login_form()
         else:
@@ -468,7 +625,8 @@ def main():
         st.sidebar.markdown(f"**환영합니다, {st.session_state.user_profile.get('name')}님!**")
         st.sidebar.caption(f"나이대: {st.session_state.user_profile.get('age_band')}")
 
-        if st.sidebar.button("🚪 로그아웃"):
+        # 로그아웃 버튼을 primary로 설정 (포인트 색상)
+        if st.sidebar.button("🚪 로그아웃", type="primary"): 
             st.session_state.logged_in = False
             st.session_state.user_profile = {}
             st.info("로그아웃되었습니다.")
