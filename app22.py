@@ -184,7 +184,6 @@ def recommend_mentors(search_field, search_topic, search_style):
         )
 
     if search_style:
-        # 'style' 컬럼 사용 가정
         mentors['score'] += mentors['style'].apply(lambda x: 1 if x == search_style else 0)
 
     if search_field or search_topic or search_style:
@@ -367,7 +366,7 @@ def show_daily_question():
     st.header("💬 오늘의 질문: 세대 공감 창구")
     st.write("매일 올라오는 질문에 대해 다양한 연령대의 답변을 공유하는 공간입니다.")
 
-    # 1. CSS 스타일 수정: 답변 박스 내 버튼 스타일링 추가 및 숨겨진 버튼 처리
+    # 1. CSS 스타일 수정: 숨겨진 Streamlit 버튼을 더 확실하게 숨깁니다.
     st.markdown(f"""
         <style>
         /* 앱 전체 배경 강렬한 마젠타-퍼플 그라데이션 */
@@ -461,10 +460,21 @@ def show_daily_question():
 
         /* 5. 수정/삭제 버튼 스타일링 및 위치 지정 (우측 하단) */
         
-        /* 실제 Streamlit 버튼(disabled 상태 포함)을 화면에서 완전히 숨깁니다. */
+        /* 📌 이 부분이 핵심 수정입니다. stButton을 포함하는 모든 div를 숨깁니다. */
+        /* Streamlit 버튼(type="secondary" 사용)이 포함된 모든 컨테이너를 숨깁니다. */
+        /* 이는 st.columns 외부에서 생성된 버튼이나, 숨겨지지 않은 버튼들을 모두 포함합니다. */
+        div[data-testid^="stVerticalBlock"] > div > div > button[kind="secondary"],
         div[data-testid^="stColumn"] > div > div > button[kind="secondary"],
-        div[data-testid^="stColumn"] > div > div > button[kind="secondary"][disabled] {{
-             display: none !important;
+        div[data-testid^="stVerticalBlock"] > div > div > button[kind="secondary"][disabled],
+        div[data-testid^="stColumn"] > div > div > button[kind="secondary"][disabled],
+        /* 💡 추가: 버튼이 포함된 상위 div까지 숨기도록 선택자 수정 */
+        div[data-testid^="stVerticalBlock"] > div > div:has(button[kind="secondary"]),
+        div[data-testid^="stColumn"] > div > div:has(button[kind="secondary"]) {{
+            display: none !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            visibility: hidden;
         }}
 
         /* HTML 마크다운으로 삽입된 버튼 컨테이너 스타일링 및 위치 */
@@ -487,6 +497,10 @@ def show_daily_question():
             transition: all 0.2s ease-in-out;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             text-shadow: none; /* 버튼 내부 텍스트 그림자 제거 */
+            /* Streamlit의 CSS를 오버라이드하기 위해 !important 사용 */
+            margin: 0 !important; 
+            height: auto !important;
+            line-height: normal !important;
         }}
         
         /* 수정 버튼 스타일 */
@@ -525,7 +539,7 @@ def show_daily_question():
         sorted_answers = st.session_state.daily_answers 
         current_name = st.session_state.user_profile.get('name')
         
-        # Streamlit의 컬럼 구조를 사용하여 답변을 3개씩 나열합니다.
+        # 📌 수정: st.columns(3)을 사용하여 답변을 나열합니다.
         cols = st.columns(3)
         
         for i, ans in enumerate(sorted_answers):
@@ -578,12 +592,7 @@ def show_daily_question():
                 
                 else:
                     # 답변 텍스트 버블 표시
-                    # NOTE: Python 문자열 리터럴 앞에 r을 붙여 raw string으로 처리하고, 
-                    # f-string 대신 .format()을 사용하거나,
-                    # f-string 사용 시 중괄호 {}를 이중으로 {{ }} 이스케이프해야 HTML이 노출되지 않습니다.
-                    # 여기서는 HTML 마크업 부분을 일반 문자열 리터럴로 분리하고 f-string으로 재결합하여 이스케이프 문제를 해결합니다.
-
-                    # 1. HTML 마크업을 문자열 리터럴로 정의 (중괄호를 이스케이프하거나 f-string을 피함)
+                    
                     action_buttons_html = f"""
                         <div class="action-button-wrapper">
                             <button class="edit-button" 
@@ -597,7 +606,6 @@ def show_daily_question():
                         </div>
                         """ if is_owner else ''
                     
-                    # 2. 메인 HTML 구조를 f-string으로 정의 (변수만 사용하고 HTML 내부의 중괄호는 없으므로 안전함)
                     answer_display_html = f"""
                         <div class='bubble-container'>
                             <div class='bubble-info'>
@@ -614,19 +622,13 @@ def show_daily_question():
                     # st.markdown()을 사용하여 HTML 코드를 렌더링
                     st.markdown(answer_display_html, unsafe_allow_html=True)
                     
-                    # ---------------------- 실제 Streamlit 버튼 (숨겨짐) ----------------------
+                    # ---------------------- 📌 실제 Streamlit 버튼 (숨겨짐) ----------------------
                     if is_owner:
                         # 클릭 시 수정 모드로 전환
-                        # type="secondary" 속성을 이용하여 기본 Streamlit 버튼을 숨기고 HTML 버튼으로 클릭 이벤트를 트리거합니다.
-                        if st.button("수정", key=f"edit_btn_{i}", help="답변 수정", use_container_width=False, type="secondary"):
-                            st.session_state.editing_index = i
-                            st.session_state.confirming_delete_index = -1 
-                            st.rerun()
+                        # type="secondary" 속성을 이용하여 HTML 버튼의 트리거 대상이 되며, CSS에 의해 숨겨집니다.
+                        st.button("수정", key=f"edit_btn_{i}", help="답변 수정", type="secondary")
                         # 클릭 시 삭제 확인 모드로 전환
-                        if st.button("삭제", key=f"delete_btn_{i}", help="답변 삭제", use_container_width=False, type="secondary"):
-                            st.session_state.editing_index = -1
-                            st.session_state.confirming_delete_index = i
-                            st.rerun()
+                        st.button("삭제", key=f"delete_btn_{i}", help="답변 삭제", type="secondary")
 
 
     st.divider()
